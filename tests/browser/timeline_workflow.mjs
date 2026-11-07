@@ -315,6 +315,11 @@ try {
   });
   page.setDefaultTimeout(20000);
   const errors = [];
+  let browserSession;
+  page.on("request", (request) => {
+    const session = request.headers()["x-opendirector-session"];
+    if (session) browserSession = session;
+  });
   page.on("pageerror", (e) => errors.push(e.message));
   let url = base + `/ai-tool/ai-canvas/${pid}`;
   const saved = () => page.getByText("Saved on this device", { exact: true }).waitFor();
@@ -485,11 +490,17 @@ try {
   );
   // Shut down the actual API process and reopen the same root, not just a page refresh.
   await page.getByRole("button", { name: "Close editor" }).click();
-  // The pagehide keepalive can outlive the document. Wait for the API to
-  // acknowledge the lease release before stopping it.
-  const beforeRelease = logs.length;
+  // Confirm the edit lease is released before stopping the API.
+  assert.ok(browserSession);
+  const releaseStatus = await page.evaluate(async (session) => {
+    const response = await fetch(`/api/creation/sessions/${session}`, {
+      method: "DELETE",
+      headers: { "X-OpenDirector-Request": "1" },
+    });
+    return response.status;
+  }, browserSession);
+  assert.equal(releaseStatus, 200);
   await page.goto("about:blank");
-  await until(() => /"DELETE \/api\/creation\/sessions\/[^ ]+ HTTP\/1\.1" 200/.test(logs.slice(beforeRelease)));
   await stop(server);
   await startApi();
   await page.goto(url);
