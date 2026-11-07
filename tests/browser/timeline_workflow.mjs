@@ -485,7 +485,11 @@ try {
   );
   // Shut down the actual API process and reopen the same root, not just a page refresh.
   await page.getByRole("button", { name: "Close editor" }).click();
+  // The pagehide keepalive can outlive the document. Wait for the API to
+  // acknowledge the lease release before stopping it.
+  const beforeRelease = logs.length;
   await page.goto("about:blank");
+  await until(() => /"DELETE \/api\/creation\/sessions\/[^ ]+ HTTP\/1\.1" 200/.test(logs.slice(beforeRelease)));
   await stop(server);
   await startApi();
   await page.goto(url);
