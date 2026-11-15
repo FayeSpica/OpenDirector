@@ -672,6 +672,7 @@ export function useWorkspaceInteraction(rt: WorkspaceRuntime) {
           selected: selectedEdges.includes(e.id),
           hidden: !showEdges,
           selectable: !e.id.startsWith("tool-"),
+          deletable: e.intent !== "post_edit_result",
           data: {
             ...referencePresentation(doc, e),
             sourceBounds: (() => {

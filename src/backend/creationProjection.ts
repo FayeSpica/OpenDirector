@@ -899,7 +899,10 @@ export class CreationProjection {
     }
     for (const item of snapshot.canvasItems) {
       const asset = currentAsset(snapshot, item);
-      const sourceId = asset?.provenance.sourceItemId;
+      const timelineSources = asset?.provenance.source === "rendered" && asset.provenance.editorDocumentId
+        ? snapshot.canvasItems.filter((source) => source.kind === "timeline" && source.binding.role === "editor" && source.binding.objectRef.id === asset.provenance.editorDocumentId)
+        : [];
+      const sourceId = asset?.provenance.sourceItemId ?? (timelineSources.length === 1 ? timelineSources[0].id : undefined);
       if (sourceId && snapshot.canvasItems.some((i) => i.id === sourceId))
         document.edges.push({
           id: `publication:${item.id}:${asset!.id}`,

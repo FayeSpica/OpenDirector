@@ -9,6 +9,7 @@ import { SubjectNodeCard } from "./SubjectNodeCard";
 import { CanvasIcon } from "./CanvasIcon";
 import { TooltipButton } from "./TooltipButton";
 import { GeneratingOverlay } from "./GeneratingOverlay";
+import { TimelinePendingVideo } from "./TimelineOutput";
 import { CanvasVideoPreview } from "./CanvasMediaPreview";
 import "./nodes.css";
 import {
@@ -18,7 +19,7 @@ import {
 import { useI18n } from "../i18n/I18nProvider.tsx";
 import type { MessageKey } from "../i18n/types.ts";
 
-export type CanvasFlowNode = Node<CanvasNodeData, CanvasNodeKind>;
+export type CanvasFlowNode = Node<CanvasNodeData & { timelineOutput?: Parameters<typeof TimelinePendingVideo>[0]["output"] }, CanvasNodeKind>;
 
 const kindNameKeys: Record<CanvasNodeKind, MessageKey> = {
   image: "canvasNodes.kind.image",
@@ -57,6 +58,8 @@ function CanvasNodeContents({ id, data, selected }: NodeProps<CanvasFlowNode>) {
     if (selected) actions?.reopenComposer(id, event);
     else actions?.select(id, event);
   };
+
+  if (data.timelineOutput) return <TimelinePendingVideo id={id} selected={selected} output={data.timelineOutput} />;
 
   return (
     <NodeFrame

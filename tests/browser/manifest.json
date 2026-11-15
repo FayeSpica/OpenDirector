@@ -168,10 +168,7 @@
     {
       "file": "creation_history.mjs",
       "previewSafe": true,
-      "lanes": [
-        "extended",
-        "production"
-      ]
+      "lanes": ["extended", "production"]
     },
     {
       "file": "creation_journey.mjs",
@@ -190,10 +187,7 @@
     {
       "file": "default_entry.mjs",
       "previewSafe": true,
-      "lanes": [
-        "extended",
-        "production"
-      ]
+      "lanes": ["extended", "production"]
     },
     {
       "file": "double_shift_chat.mjs",
@@ -221,10 +215,7 @@
     {
       "file": "first_last_frame_connections.mjs",
       "previewSafe": true,
-      "lanes": [
-        "extended",
-        "production"
-      ]
+      "lanes": ["extended", "production"]
     },
     {
       "file": "generation_feedback.mjs",
@@ -343,10 +334,7 @@
     {
       "file": "paste_undo.mjs",
       "previewSafe": true,
-      "lanes": [
-        "extended",
-        "production"
-      ]
+      "lanes": ["extended", "production"]
     },
     {
       "file": "project_list_overflow.mjs",
@@ -503,6 +491,14 @@
       "file": "zhipu_real.mjs",
       "helper": true,
       "note": "Manual acceptance against the real Zhipu BigModel service; needs ZHIPU_API_KEY and incurs charges, so no lane runs it."
+    },
+    {
+      "file": "timeline_node_output.mjs",
+      "lanes": [
+        "gate"
+      ],
+      "previewSafe": false,
+      "note": "Canvas timeline output button and shortcut publish real MP4 results in both locales without opening the editor."
     }
   ]
 }
