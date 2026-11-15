@@ -6568,6 +6568,12 @@
       "InputRules": {
         "additionalProperties": false,
         "properties": {
+          "fractionalDuration": {
+            "default": false,
+            "description": "Accept fractional video seconds within each output duration range.",
+            "title": "Fractionalduration",
+            "type": "boolean"
+          },
           "profile": {
             "description": "Model capability profile.",
             "maxLength": 100,
@@ -14301,7 +14307,7 @@
               }
             ],
             "default": null,
-            "description": "Duration in seconds.",
+            "description": "Duration in seconds; fractional values require model inputRules.fractionalDuration. Generated frames may be aligned by the model.",
             "title": "Durationseconds"
           },
           "aspectRatio": {
@@ -21932,6 +21938,12 @@
       "InputRules": {
         "additionalProperties": false,
         "properties": {
+          "fractionalDuration": {
+            "default": false,
+            "description": "Accept fractional video seconds within each output duration range.",
+            "title": "Fractionalduration",
+            "type": "boolean"
+          },
           "profile": {
             "description": "Model capability profile.",
             "maxLength": 100,
@@ -29961,7 +29973,7 @@
               }
             ],
             "default": null,
-            "description": "Duration in seconds.",
+            "description": "Duration in seconds; fractional values require model inputRules.fractionalDuration. Generated frames may be aligned by the model.",
             "title": "Durationseconds"
           },
           "aspectRatio": {

@@ -133,3 +133,17 @@ def test_first_frame_image_cap_uses_the_shared_limit():
         validate_generation(spec, public, tuple(image_ref(number) for number in range(FRAME_IMAGE_LIMIT + 1)))
     with pytest.raises(ValueError, match='参考素材数量超过上限'):
         validate_generation(spec, public, tuple(image_ref(number) for number in range(MAX_REFERENCES + 1)))
+
+
+def test_fractional_duration_is_published_only_for_vllm_omni():
+    from opendirector.domain.input_rules import input_rules
+    from opendirector.domain.video_capabilities import validate_video_duration
+    from opendirector.domain.projects import ProjectError
+
+    config = dict(kind='video', url='http://model.test/v1', modelId='MiniMaxAI/MiniMax-H3', protocol='vllm_omni')
+    assert input_rules(config)['fractionalDuration'] is True
+    validate_video_duration(config, 6.583333, '480P')
+    official = dict(kind='video', url='https://api.minimax.cn/v2', modelId='MiniMax-H3', protocol='minimax_video_v2')
+    assert input_rules(official).get('fractionalDuration', False) is False
+    with pytest.raises(ProjectError):
+        validate_video_duration(official, 6.583333)

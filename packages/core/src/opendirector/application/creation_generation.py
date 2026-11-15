@@ -29,6 +29,7 @@ from opendirector.domain.creation.validation import ContractError
 from opendirector.domain.input_rules import input_rules
 from opendirector.domain.minimax_speech import is_minimax_speech
 from opendirector.domain.projects import ProjectError
+from opendirector.domain.rule_facts import duration_matches
 from opendirector.domain.video_output import apply_video_resolution
 from opendirector.ports.gateway import gateway
 from opendirector.integrations.http_settings import MODEL_JOB_CONTEXT
@@ -212,7 +213,7 @@ class CreationGeneration(GenerationRuntime):
                 if node.get('videoMode') == 'continuation':
                     raise ProjectError('接续沿用上一段视频的画幅，请将比例设为自动。', 422)
                 caps = rules.get('videoCapabilities') or {}
-                choices = [item for item in caps.get('outputs', []) if seconds is None or seconds in item['durations']]
+                choices = [item for item in caps.get('outputs', []) if seconds is None or duration_matches(seconds, item['durations'], rules.get('fractionalDuration', False))]
                 if not choices:
                     raise ProjectError('指定视频比例前，请在模型接入中配置输出规格。', 422)
                 preferred = next((item for item in choices if item['resolution'] == caps.get('defaultResolution')), choices[0])

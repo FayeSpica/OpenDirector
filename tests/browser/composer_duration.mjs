@@ -48,11 +48,10 @@ const config = await call("/api/model-configs", {
   kind: "video",
   modelId: "fixture-duration-sparse",
   url: "http://127.0.0.1:12345/v1",
-  apiKey: "",
-  connectionType: "self_hosted",
-  protocol: "vllm_omni",
-  authMode: "none",
-  videoAdapter: "standard",
+  apiKey: "fixture-only",
+  connectionType: "api",
+  protocol: "volcengine",
+  authMode: "bearer",
   videoCapabilities: {
     outputs: [
       { resolution: "480P", width: 832, height: 480, durations: [3, 5, 7] },
@@ -290,6 +289,26 @@ try {
   await page.getByText("已保存到本机", { exact: true }).waitFor();
   await page.locator(".react-flow__node").click();
   assert.equal(await trigger.innerText(), "7 秒");
+  await chooseGenerationModel(page, `config:${fastConfig.id}`);
+  for (const [locale, language, triggerName, dialogName, inputName] of [
+    ["zh-CN", "中文", "视频生成时长", "视频生成时长设置", "精确创作时长"],
+    ["en-US", "EN", "Video duration", "Video duration settings", "Exact creation duration"],
+  ]) {
+    await page.getByRole("button", { name: language, exact: true }).click();
+    const decimalTrigger = page.getByRole("button", { name: triggerName, exact: true });
+    await decimalTrigger.click();
+    const decimalPopup = page.getByRole("dialog", { name: dialogName, exact: true });
+    const decimalInput = decimalPopup.getByRole("spinbutton", { name: inputName, exact: true });
+    await decimalInput.fill("6.583333");
+    await decimalInput.press("Enter");
+    assert.equal(await decimalInput.inputValue(), "6.583333", locale);
+    assert.equal(await decimalInput.getAttribute("step"), "any");
+    await decimalInput.press("Escape");
+    await page.waitForTimeout(500);
+    const saved = await call(`/api/creation/projects/${projectId}`);
+    assert.equal(saved.generationSpecs.find(spec => spec.kind === "video").parameters.durationSeconds, 6.583333);
+  }
+  await page.getByRole("button", { name: "中文", exact: true }).click();
   // The picker only lists configured services; one without published
   // durations must not offer invented choices.
   await chooseGenerationModel(page, `config:${unknown.id}`);

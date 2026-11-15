@@ -46,6 +46,7 @@ class VoiceLibraryCapabilities(Contract):
 
 
 class InputRules(Contract):
+    fractionalDuration: bool = Field(default=False, exclude_if=lambda value: not value, description="Accept fractional video seconds within each output duration range.")
     profile: str = Field(min_length=1, max_length=100, description='Model capability profile.')
     voiceLibrary: VoiceLibraryCapabilities | None = Field(default=None, exclude_if=lambda value: value is None,
         description='Supported voice registry and adapter requirements; omitted for unsupported models.')

@@ -665,6 +665,7 @@ export interface ImageParametersInput extends ContractInput {
 }
 
 export interface InputRulesInput extends ContractInput {
+  readonly fractionalDuration?: boolean;
   readonly profile: string;
   readonly voiceLibrary?: VoiceLibraryCapabilitiesInput | null;
   readonly maxPromptCharacters?: number | null;
@@ -2240,6 +2241,7 @@ export interface ImageParameters extends Contract {
 }
 
 export interface InputRules extends Contract {
+  readonly fractionalDuration?: boolean;
   readonly profile: string;
   readonly voiceLibrary?: VoiceLibraryCapabilities | null;
   readonly maxPromptCharacters?: number | null;

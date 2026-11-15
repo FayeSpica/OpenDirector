@@ -9,7 +9,9 @@ export function DurationControl({
   disabled,
   onChange,
   scale,
+  fractional = false,
 }: {
+  fractional?: boolean;
   values: readonly number[];
   value: number;
   disabled: boolean;
@@ -52,14 +54,14 @@ export function DurationControl({
   const hint = (seconds: number) =>
     seconds <= minimum || seconds >= maximum
       ? limit
-      : !values.includes(seconds)
+      : !fractional && !values.includes(seconds)
         ? t("canvasNodes.duration.unsupported", {
             values: values.join(t("canvasNodes.duration.separator")),
           })
         : "";
   const choose = (seconds: number) => {
     if (!Number.isFinite(seconds) || !values.length || disabled) return;
-    const allowed = values.reduce((nearest, candidate) =>
+    const allowed = fractional ? Math.max(minimum, Math.min(maximum, seconds)) : values.reduce((nearest, candidate) =>
       Math.abs(candidate - seconds) < Math.abs(nearest - seconds)
         ? candidate
         : nearest,
@@ -97,7 +99,7 @@ export function DurationControl({
           aria-label={t("canvasNodes.duration.aria")}
           min={min}
           max={max}
-          step={1}
+          step={fractional ? "any" : 1}
           disabled={disabled || values.length <= 1}
           value={Math.max(min, Math.min(max, value))}
           aria-valuetext={t("canvasNodes.duration.value", { value })}
@@ -109,6 +111,7 @@ export function DurationControl({
             if (event.buttons === 1) pointerHint(event);
           }}
           onKeyDown={(event) => {
+            if (fractional) return;
             const index = Math.max(0, values.indexOf(value));
             const next =
               event.key === "Home"
@@ -142,9 +145,10 @@ export function DurationControl({
         <input
           type="number"
           aria-label={t("canvasNodes.duration.exactAria")}
+          title={fractional ? t("generation.duration.fractionalHint") : undefined}
           min={minimum}
           max={maximum}
-          step={1}
+          step={fractional ? "any" : 1}
           aria-description={limit}
           aria-describedby={notice ? noticeId : undefined}
           value={draft}
@@ -154,7 +158,7 @@ export function DurationControl({
             setDraft(next);
             // Persist a complete valid number immediately, so dismissing the
             // popover cannot discard it before a native blur is delivered.
-            if (next.trim() && values.includes(Number(next)))
+            if (next.trim() && Number.isFinite(Number(next)) && (values.includes(Number(next)) || fractional && Number(next) >= minimum && Number(next) <= maximum))
               choose(Number(next));
           }}
           onBlur={commit}

@@ -788,6 +788,7 @@ export function NodeComposer({
           placement="above-anchor"
         >
           <DurationControl
+            fractional={!!config?.inputRules.fractionalDuration}
             values={durationValues}
             value={settings.durationSeconds}
             disabled={running}

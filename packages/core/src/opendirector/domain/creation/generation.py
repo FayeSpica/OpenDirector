@@ -13,7 +13,7 @@ from opendirector.domain.rule_facts import (
     FASTH3_MEDIA_REFERENCE_LIMIT, FRAME_IMAGE_LIMIT, LYRICS_MAX_LENGTH, MAX_REFERENCES,
     MUSIC_SECONDS_INITIAL, MUSIC_SECONDS_MAX, MUSIC_SECONDS_MIN, PROMPT_MAX_LENGTH,
     REFERENCE_MEDIA_SECONDS, STORED_VOICE_PATTERN, TEXT_DEFAULT_MAX_TOKENS, TEXT_MAX_TOKENS,
-    effective_video_mode, generate_audio_options,
+    duration_matches, effective_video_mode, generate_audio_options,
 )
 from .assets import AssetRef, MediaMetadata
 from .base import CanvasItemVersion, Contract, Digest, GenerationKind, NonNegative, ObjectVersion, PositiveInt, ProjectEntity, Revision, digest, unique
@@ -36,7 +36,7 @@ class ImageParameters(Contract):
 class VideoParameters(Contract):
     generateAudio: bool = Field(default=True, description='Include audio; value must be allowed by model inputRules.generateAudioOptions.')
     videoMode: VideoMode = Field(default='first_frame', description='Video generation input mode.')
-    durationSeconds: Annotated[float, Field(strict=True, ge=1, le=60)] | None = Field(default=None, description='Duration in seconds.')
+    durationSeconds: Annotated[float, Field(strict=True, ge=1, le=60)] | None = Field(default=None, description='Duration in seconds; fractional values require model inputRules.fractionalDuration. Generated frames may be aligned by the model.')
     aspectRatio: str | None = Field(default=None, pattern=r'^[1-9]\d?:[1-9]\d?$', description='Output width-to-height ratio.')
     resolution: str = Field(default='auto', pattern=r'^(?:auto|[A-Z0-9][A-Z0-9_.-]{0,23})$', description='Requested output resolution.')
 
@@ -490,5 +490,5 @@ def validate_generation(spec: GenerationSpec, model: ModelConfigPublic, referenc
     caps = rules.videoCapabilities
     if caps and params.durationSeconds is not None:
         choices = [output for output in caps.outputs if params.resolution == 'auto' or output.resolution == params.resolution]
-        if not any(params.durationSeconds in output.durations for output in choices):
+        if not any(duration_matches(params.durationSeconds, output.durations, rules.fractionalDuration) for output in choices):
             raise ValueError('当前时长与分辨率组合不受支持。')

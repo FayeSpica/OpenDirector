@@ -47,6 +47,8 @@ HTTP 400。
 
 在设置的“通用”页中可切换主题、调整去除水印选项。水印设置仅影响后续生成的内容，实际效果取决于模型服务是否支持。
 
+vLLM-Omni 视频连接支持直接输入小数秒，例如 `6.583333`。CLI 可使用 `opendirector video create --duration 6.583333` 并填写其余必需参数。先运行 `opendirector video create --help` 和 `opendirector model list`；`inputRules.fractionalDuration` 表示支持小数秒，各输出规格的时长列表定义允许范围。H3 可能按模型支持的帧数对齐，拼接分段前应核对结果的实际时长。
+
 ## 制作第一支短片
 
 建议先完成一个镜头的生成与导出，再扩展到多段素材。

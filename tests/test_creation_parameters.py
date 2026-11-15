@@ -514,3 +514,46 @@ def test_unsupported_image_output_draft_blocks_only_its_own_generation(project):
     assert send(store, pid, 'generationSpec.update', session=session,
                 versions=[ver('generation_spec', spec)], spec=fixed).status == 'applied'
     assert canvas.projection(pid)['capabilities'][str(item.id)].canGenerate is True
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('seconds', [107 / 24, 5.25, 6.583333])
+@pytest.mark.parametrize('model', ['fixture', 'MiniMaxAI/MiniMax-H3'])
+async def test_fractional_video_duration_survives_acceptance_and_wire(project, seconds, model):
+    from opendirector.integrations.vllm_omni import h3_frames
+
+    calls = []
+    clip = subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=48x84:r=24',
+        '-t', '0.3', '-threads', '1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+        '-movflags', 'frag_keyframe+empty_moov', '-f', 'mp4', 'pipe:1'], capture_output=True, check=True).stdout
+
+    def handler(request):
+        if request.method == 'POST':
+            calls.append(form(request)[0])
+            return httpx.Response(200, json={'id': 'fractional-video'})
+        if request.url.path.endswith('/content'):
+            return httpx.Response(200, content=clip)
+        return httpx.Response(200, json={'status': 'completed'})
+
+    runner, item, spec_id = setup(project, 'video',
+        dict(durationSeconds=seconds, resolution='480P', aspectRatio='16:9'), handler,
+        model=model, protocol='vllm_omni', caps=dict(outputs=[dict(resolution='480P', width=832,
+            height=480, durations=[4, 15])], defaultResolution='480P', defaultDuration=4, dimensionStep=32))
+    store, pid, _ = project
+    try:
+        await submit(project, runner, item, spec_id)
+        await done(runner)
+        snapshot = store.snapshot(pid)
+        job = snapshot.jobs[-1]
+        assert job.status == 'succeeded', job.errorDetails
+        assert job.inputSnapshot.spec.parameters.durationSeconds == seconds
+        assert job.execution.durationSeconds == seconds
+        if model == 'MiniMaxAI/MiniMax-H3':
+            assert calls[0]['num_frames'] == str(h3_frames(seconds))
+            if seconds == 107 / 24:
+                assert calls[0]['num_frames'] == '107'
+        else:
+            assert calls[0]['seconds'] == str(seconds)
+        assert CreationProjects(LocalProjects(store.local.repository)).snapshot(pid) == snapshot
+    finally:
+        await runner.close()

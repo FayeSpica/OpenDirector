@@ -179,7 +179,9 @@ class GenerationProviders(VolcengineGeneration):
                                 files.append(('input_references' if fast else 'input_reference', (meta['name'], data, image_type(data) if source_kind == 'image' else meta['type'])))
                         parameters = task['parameters']
                         form = {'model': config['modelId'], 'prompt': prepared['prompt']}
-                        if 'duration' in parameters: form['seconds'] = format(parameters['duration'], 'g')
+                        if 'duration' in parameters:
+                            seconds = parameters['duration']
+                            form['seconds'] = str(int(seconds)) if float(seconds).is_integer() else str(seconds)
                         if 'size' in parameters: form['size'] = parameters['size']
                         if fast:
                             form.update({

@@ -3,6 +3,7 @@ import { nodeByteSize } from "../canvas/uploadPolicy.ts";
 import type { CanvasNode, GenerationSettings } from "../canvas/model.ts";
 import {
   RULE_FACTS,
+  durationMatches,
   aspectRatioChoices,
   effectiveVideoMode,
   generateAudioOptions,
@@ -33,6 +34,7 @@ export interface VideoCapabilities {
 }
 
 export interface InputRules {
+  fractionalDuration?: boolean;
   profile: string;
   allowedKinds: string[];
   maxImages: number;
@@ -369,6 +371,7 @@ export function backendResolutions(
 ): string[] {
   const rules = config?.inputRules;
   return resolutionChoices({
+    fractionalDuration: rules?.fractionalDuration,
     kind: settings.mode,
     videoMode: settings.videoMode,
     aspectRatio: settings.aspectRatio,
@@ -483,7 +486,7 @@ export function serviceVideoSettings(
   const next = { ...settings };
   const caps = config.inputRules.videoCapabilities;
   const durations = backendDurations(config);
-  if (durations.length && !durations.includes(next.durationSeconds))
+  if (durations.length && !durationMatches(next.durationSeconds, durations, config.inputRules.fractionalDuration))
     next.durationSeconds = caps!.defaultDuration;
   if (
     next.videoMode === "continuation" &&
@@ -637,7 +640,7 @@ export function backendBlocker(
   const references = backendReferences(settings, [...incoming, ...pinned], config);
   if (settings.mode === "video") {
     const durations = backendDurations(config);
-    if (durations.length && !durations.includes(settings.durationSeconds))
+    if (durations.length && !durationMatches(settings.durationSeconds, durations, rules.fractionalDuration))
       return tNow("errors.rules.duration");
     if (
       rules.outputResolutions &&
