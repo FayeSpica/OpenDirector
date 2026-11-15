@@ -98,7 +98,8 @@ def capability_fields(config, rules):
         validate_cogvideo_outputs(capabilities)
     if rules['profile'] == 'kling-official':
         validate_kling_outputs(capabilities, config['modelId'])
-    rules['fractionalDuration'] = config.get('kind') == 'video' and config.get('protocol') == 'vllm_omni'
+    if config.get('kind') == 'video' and config.get('protocol') == 'vllm_omni':
+        rules['fractionalDuration'] = True
     rules['videoCapabilities'] = capabilities
     rules['outputResolutions'] = [item['resolution'] for item in capabilities['outputs']] if capabilities else []
     return rules
