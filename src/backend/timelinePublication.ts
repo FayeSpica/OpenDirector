@@ -51,7 +51,7 @@ export function timelinePublication(
     | undefined;
   return async (result: LinkedMediaResult) => {
     if (!delivery) {
-      const asset = await projection.importResource(result);
+      const asset = await projection.importResource({ ...result, fresh: true, identity: commandId });
       delivery = {
         payload: {
           itemId,

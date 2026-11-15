@@ -96,7 +96,7 @@ import { DirectorStage, IconButton, helpShortcuts, nodeTypes, edgeTypes, referen
 
 
 export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
-  const timelineOutput = useTimelineOutput(rt.doc.id);
+  const timelineOutput = useTimelineOutput(rt.doc.id, rt.doc.nodes);
   const {
     actionMedia,
     actionNode,
@@ -302,8 +302,9 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
 
 
   const outputState = timelineOutput.state;
+  const outputSource = outputState ? doc.nodes.find((node) => node.id === outputState.itemId) : undefined;
   const existingOutput = outputState ? projected.nodes.find((node: { id: string }) => node.id === outputState.output.id) : undefined;
-  const pendingOutput = outputState && outputState.phase !== "done"
+  const pendingOutput = outputSource && outputState && outputState.phase !== "done"
     ? {
         id: outputState.output.id,
         type: "video" as const,
@@ -327,7 +328,7 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
     : null;
 
   useEffect(() => {
-    if (!outputState || outputState.phase === "done") return;
+    if (!outputSource || !outputState || outputState.phase === "done") return;
     const output = createNode("video", outputState.output.position, { title: outputState.output.title });
     output.id = outputState.output.id;
     rt.revealCreatedNodes.current([output], doc.nodes.some((node) => node.id === output.id) ? doc.nodes : [...doc.nodes, output]);
@@ -479,12 +480,12 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
             bypassSnapping={bypassSnapping}
             proOptions={{ hideAttribution: true }}
             nodes={pendingOutput ? existingOutput ? projected.nodes.map((node: { id: string }) => node.id === pendingOutput.id ? pendingOutput : node) : [...projected.nodes, pendingOutput] : projected.nodes}
-            edges={pendingOutput && outputState && !projected.edges.some((edge: { source: string; target: string }) => edge.source === outputState.itemId && edge.target === pendingOutput.id)
+            edges={pendingOutput && outputSource && outputState && !projected.edges.some((edge: { source: string; target: string }) => edge.source === outputState.itemId && edge.target === pendingOutput.id)
               ? [...projected.edges, {
                   id: `timeline-pending:${pendingOutput.id}`, source: outputState.itemId, target: pendingOutput.id,
                   type: "reference", hidden: !showEdges, selectable: false, deletable: false,
                   data: { state: "provenance", description: t("errors.refEvidence.editSource"),
-                    sourceBounds: (() => { const source = doc.nodes.find((node) => node.id === outputState.itemId)!; return { ...source.position, width: source.width, height: source.height }; })(),
+                    sourceBounds: { ...outputSource.position, width: outputSource.width, height: outputSource.height },
                     targetBounds: { ...pendingOutput.position, width: pendingOutput.width, height: pendingOutput.height },
                   },
                 }]

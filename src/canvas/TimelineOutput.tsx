@@ -27,7 +27,7 @@ type OutputState = {
 };
 
 /** Rendering stays in this browser; publication uses the existing versioned command. */
-export function useTimelineOutput(projectId: string) {
+export function useTimelineOutput(projectId: string, nodes: readonly CanvasNode[]) {
   const t = useT();
   const [state, setState] = useState<OutputState | null>(null);
   const active = useRef<AbortController | null>(null);
@@ -48,6 +48,14 @@ export function useTimelineOutput(projectId: string) {
   useEffect(() => {
     setState(null);
   }, [projectId]);
+
+  useEffect(() => {
+    if (!state || nodes.some((node) => node.id === state.itemId)) return;
+    active.current?.abort();
+    active.current = null;
+    pending.current = null;
+    setState(null);
+  }, [nodes, state?.itemId]);
 
   const run = async (source: CanvasNode, save: () => Promise<boolean>) => {
     const itemId = source.id;

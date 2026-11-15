@@ -71,7 +71,7 @@ try {
   await page.waitForTimeout(400);
   await page.screenshot({ path: "/tmp/opendirector-timeline-pending.png" });
   releaseFirst();
-  await page.unroute("**/commands");
+  await page.unrouteAll({ behavior: "wait" });
   await page.locator(`.react-flow__node[data-id="${pendingId}"] video`).waitFor();
   let saved = await snapshot();
   const videos = saved.canvasItems.filter((item) => item.kind === "video");
@@ -92,7 +92,7 @@ try {
   // Cancel before rendering completes; no output should be published.
   await chinese.getByRole("button", { name: "输出视频", exact: true }).click();
   await page.locator(".cw-timeline-pending").getByRole("button", { name: "取消合成", exact: true }).click();
-  await chinese.getByRole("button", { name: "输出视频", exact: true }).waitFor();
+  await page.locator(".cw-timeline-pending").waitFor({ state: "hidden" });
   assert.equal((await snapshot()).canvasItems.filter((item) => item.kind === "video").length, 1);
   const publicationIds = [];
   let loseReply = true;
@@ -125,7 +125,11 @@ try {
   await chinese.getByRole("button", { name: "输出视频", exact: true }).focus();
   const published = page.waitForResponse((response) => response.request().method() === "POST" && response.request().url().endsWith("/commands") && response.request().postDataJSON().type === "timeline.publishRender");
   await page.keyboard.press("Control+Enter");
-  assert.equal((await published).status(), 200);
+  const publishedReceipt = await (await published).json();
+  assert.equal(publishedReceipt.status, "applied", JSON.stringify(publishedReceipt));
+  await page.locator(".cw-timeline-pending").waitFor({ state: "hidden" });
+  await page.locator(".cw-workspace").focus();
+  await page.keyboard.press("Shift+1");
   assert.equal((await snapshot()).canvasItems.filter((item) => item.kind === "video").length, 1);
   await page.locator(`.react-flow__node[data-id="${pendingId}"] video`).waitFor();
   await page.locator(`.react-flow__node[data-id="${pendingId}"] .cw-node-version-button`).click();
@@ -147,7 +151,95 @@ try {
   await page.locator(`.react-flow__edge[data-id^="publication:${pendingId}:"]`).waitFor();
   assert.equal((await snapshot()).canvasItems.filter((item) => item.kind === "video").length, 1);
   await page.screenshot({ path: process.env.TIMELINE_OUTPUT_SCREENSHOT ?? "/tmp/opendirector-timeline-output.png" });
-  console.log(JSON.stringify({ isolated: true, realMp4: true, button: true, shortcut: true, bilingual: true, oneOutputThreeVersions: true, provenanceEdge: true, versionRestored: true, editorOpened: false }));
+  // Removing a source during publication must clear its transient output.
+  const disappearingSource = await page.evaluate(async ({ id, item }) => {
+    const { creationClient } = await import("/src/backend/creationClient.ts");
+    const client = creationClient(id);
+    const source = client.snapshot.canvasItems.find((entry) => entry.id === item);
+    const copy = { ...source, id: crypto.randomUUID(), position: { x: 700, y: 150 } };
+    await client.command("canvas.show", { item: copy }, []);
+    return copy.id;
+  }, fixture);
+  await page.locator(".cw-workspace").focus();
+  await page.keyboard.press("Shift+1");
+  await page.locator(`.react-flow__node[data-id="${disappearingSource}"]`).click();
+  let releaseRemoved;
+  const removedGate = new Promise((resolve) => { releaseRemoved = resolve; });
+  const removedSubmitted = page.waitForRequest((request) => request.method() === "POST" &&
+    request.url().endsWith("/commands") && request.postDataJSON().type === "timeline.publishRender" &&
+    request.postDataJSON().payload.itemId === disappearingSource);
+  await page.unrouteAll({ behavior: "wait" });
+  await page.route("**/commands", async (route) => {
+    const command = route.request().postDataJSON();
+    if (command.type === "timeline.publishRender" && command.payload.itemId === disappearingSource) {
+      await removedGate;
+    }
+    return route.continue();
+  });
+  await page.locator(".cw-selection-toolbar").getByRole("button", { name: "Output video", exact: true }).click();
+  await removedSubmitted;
+  await page.locator(".cw-timeline-pending").waitFor();
+  const hideSource = async (visible) => page.evaluate(async ({ id, itemId, visible }) => {
+    const { creationClient, objectVersion } = await import("/src/backend/creationClient.ts");
+    const client = creationClient(id);
+    const source = client.snapshot.canvasItems.find((entry) => entry.id === itemId);
+    // Simulate another writer while this browser waits for publication.
+    const { storageRequest, json } = await import("/src/backend/api.ts");
+    const receipt = await storageRequest(`/creation/projects/${id}/commands`, json("POST", {
+      commandId: crypto.randomUUID(), projectId: id,
+      type: visible ? "canvas.show" : "canvas.hide",
+      payload: visible ? { item: source } : { itemId },
+      expectedVersions: [objectVersion("canvas_item", source)],
+    }));
+    if (receipt.status !== "applied") throw new Error(JSON.stringify(receipt));
+    await client.refresh();
+  }, { id: fixture.id, itemId: disappearingSource, visible });
+  await hideSource(false);
+  await page.locator(".cw-timeline-pending").waitFor({ state: "hidden" });
+  assert.equal(await page.locator(".cw-workspace").count(), 1);
+  assert.equal(await page.locator('.react-flow__edge[data-id^="timeline-pending:"]').count(), 0);
+  const removedReply = page.waitForResponse((response) => response.request().method() === "POST" &&
+    response.request().url().endsWith("/commands") &&
+    response.request().postDataJSON().type === "timeline.publishRender");
+  releaseRemoved();
+  assert.equal((await (await removedReply).json()).status, "rejected");
+  assert.equal((await snapshot()).canvasItems.filter((item) => item.kind === "video").length, 1);
+  await page.unrouteAll({ behavior: "wait" });
+  await hideSource(true);
+  await page.locator(".cw-workspace").focus();
+  await page.keyboard.press("Shift+1");
+  await page.locator(`.react-flow__node[data-id="${disappearingSource}"]`).click();
+  const recoveredOutput = page.waitForResponse((response) => response.request().method() === "POST" &&
+    response.request().url().endsWith("/commands") && response.request().postDataJSON().type === "timeline.publishRender");
+  await page.locator(".cw-selection-toolbar").getByRole("button", { name: "Output video", exact: true }).click();
+  const recoveredReply = await recoveredOutput;
+  assert.equal((await recoveredReply.json()).status, "applied");
+  await page.locator(".cw-timeline-pending").waitFor({ state: "hidden" });
+  assert.equal((await snapshot()).canvasItems.filter((item) => item.kind === "video").length, 2);
+  assert.deepEqual(errors, []);
+  const identicalOutputs = await page.evaluate(async ({ id, item }) => {
+    const { creationClient } = await import("/src/backend/creationClient.ts");
+    const { timelinePublication, timelineOutputItem } = await import("/src/backend/timelinePublication.ts");
+    const { mediaBlobDataUrl } = await import("/src/canvas/localMediaRuntime.ts");
+    const client = creationClient(id);
+    const output = timelineOutputItem(client.snapshot, item);
+    const originalId = output.binding.objectRef.assetId;
+    const src = await mediaBlobDataUrl(await client.blob(originalId), new AbortController().signal);
+    client.rememberSource(src, originalId);
+    const result = { kind: "video", src, title: "Identical render", mimeType: "video/mp4" };
+    const assets = [];
+    for (let index = 0; index < 2; index++) {
+      await timelinePublication(client, client.snapshot, item)(result);
+      const current = timelineOutputItem(client.snapshot, item);
+      assets.push(client.snapshot.assets.find((asset) => asset.id === current.binding.objectRef.assetId));
+    }
+    return assets.map(({ id, fingerprint }) => ({ id, fingerprint }));
+  }, fixture);
+  assert.notEqual(identicalOutputs[0].id, identicalOutputs[1].id);
+  assert.equal(identicalOutputs[0].fingerprint, identicalOutputs[1].fingerprint);
+  assert.equal((await snapshot()).canvasItems.filter((item) => item.kind === "video").length, 2);
+  assert.deepEqual(errors, []);
+  console.log(JSON.stringify({ isolated: true, realMp4: true, button: true, shortcut: true, bilingual: true, oneOutputThreeVersions: true, provenanceEdge: true, versionRestored: true, removedSourceCleared: true, identicalRenderVersions: true, editorOpened: false }));
 } finally {
   await browser.close();
 }
