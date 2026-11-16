@@ -2338,6 +2338,7 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
           key={textWindowNode.id}
           node={textWindowNode}
           locked={lockedIds.has(textWindowNode.id)}
+          selections={actions.textSelections}
           onUpdate={(text) =>
             command({
               type: "update-node",
@@ -2345,7 +2346,12 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
               patch: { data: { text } },
             })
           }
-          onClose={() => setTextWindowId(null)}
+          onClose={() => {
+            void persist(historyRef.current.present);
+            setTextWindowId(null);
+            if (!lockedIds.has(textWindowNode.id)) setTextEditingId(textWindowNode.id);
+            else root.current?.focus({ preventScroll: true });
+          }}
           onBeginEdit={begin}
           onEndEdit={end}
         />
