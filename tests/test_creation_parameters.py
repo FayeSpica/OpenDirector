@@ -517,11 +517,9 @@ def test_unsupported_image_output_draft_blocks_only_its_own_generation(project):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize('seconds', [107 / 24, 5.25, 6.583333])
+@pytest.mark.parametrize('seconds,frames', [(4, 107), (107 / 24, 107), (4.5, 124), (5.25, 141), (6.583333, 158), (15, 362)])
 @pytest.mark.parametrize('model', ['fixture', 'MiniMaxAI/MiniMax-H3'])
-async def test_fractional_video_duration_survives_acceptance_and_wire(project, seconds, model):
-    from opendirector.integrations.vllm_omni import h3_frames
-
+async def test_fractional_video_duration_survives_acceptance_and_wire(project, seconds, frames, model):
     calls = []
     clip = subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=48x84:r=24',
         '-t', '0.3', '-threads', '1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
@@ -549,11 +547,10 @@ async def test_fractional_video_duration_survives_acceptance_and_wire(project, s
         assert job.inputSnapshot.spec.parameters.durationSeconds == seconds
         assert job.execution.durationSeconds == seconds
         if model == 'MiniMaxAI/MiniMax-H3':
-            assert calls[0]['num_frames'] == str(h3_frames(seconds))
-            if seconds == 107 / 24:
-                assert calls[0]['num_frames'] == '107'
+            assert calls[0]['num_frames'] == str(frames)
+            assert 'seconds' not in calls[0]
         else:
-            assert calls[0]['seconds'] == str(seconds)
+            assert float(calls[0]['seconds']) == seconds
         assert CreationProjects(LocalProjects(store.local.repository)).snapshot(pid) == snapshot
     finally:
         await runner.close()

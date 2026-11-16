@@ -1,6 +1,7 @@
 /** Composer, generation state, model choice and generation rules. */
 export const generation = {
-  "generation.duration.fractionalHint": "Fractional seconds are supported. H3 may align the output to its supported frame count.",
+  "generation.duration.fractionalHint": "H3 accepts fractional seconds and aligns output frames upward to 17k+5 at 24 fps.",
+  "generation.duration.aligned": "Output: {frames} frames · {seconds} s",
   "generation.bigmodel.watermarkWaiver":
     "BigModel requires a signed waiver to remove watermarks. Complete it in Personal Center → Security Management → Watermark Removal Management; otherwise outputs may still contain watermarks.",
   "generation.model.unconfigured":

@@ -1,6 +1,7 @@
 /** Composer, generation state, model choice and generation rules. */
 export const generation = {
-  "generation.duration.fractionalHint": "支持小数秒。H3 实际输出时长可能因模型帧数对齐而变化。",
+  "generation.duration.fractionalHint": "H3 支持小数秒，输出帧数向上对齐至 17k+5，帧率为 24 fps。",
+  "generation.duration.aligned": "实际输出：{frames} 帧 · {seconds} 秒",
   "generation.bigmodel.watermarkWaiver":
     "BigModel 去水印需先签署免责声明，请前往个人中心 → 安全管理 → 去水印管理完成签署，否则生成结果仍可能带有水印。",
   "generation.model.unconfigured":

@@ -434,7 +434,7 @@ def add_material(ctx: typer.Context, asset: Annotated[UUID, typer.Option(help="R
 def video_create(ctx: typer.Context,
                  model: Annotated[str, typer.Option(help="Video model configuration UUID or unique exact model name from opendirector model list.")],
                  prompt: Annotated[str, typer.Option(help="Video generation prompt.")],
-                 duration: Annotated[float, typer.Option(min=0, help="Video duration in seconds, e.g. 6.583333. Fractional values require model inputRules.fractionalDuration; inspect model list for supported ranges. H3 may align the generated frame count.")],
+                 duration: Annotated[float, typer.Option(min=0, help="Video duration in seconds, e.g. 6.583333. Fractional values require model inputRules.fractionalDuration; inspect model list for supported ranges. Native H3 accepts 4-15 seconds and aligns frames upward to 17k+5 at 24 fps (15 seconds becomes 362 frames).")],
                  x: Annotated[float, typer.Option(help="Canvas X coordinate. Choose using the current item positions and sizes.")],
                  y: Annotated[float, typer.Option(help="Canvas Y coordinate. Choose using the current item positions and sizes.")],
                  first_frame: Annotated[UUID | None, typer.Option(help="Source image canvas item for first-frame mode.")] = None,

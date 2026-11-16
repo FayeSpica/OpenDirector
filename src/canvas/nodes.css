@@ -655,6 +655,15 @@
   align-items: center;
   gap: 16px;
 }
+.cw-duration-controls:has(.cw-duration-output) {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.cw-duration-output {
+  flex-basis: 100%;
+  order: 1;
+  font-size: 11px;
+}
 .cw-duration-slider {
   flex: 1;
   min-width: 0;

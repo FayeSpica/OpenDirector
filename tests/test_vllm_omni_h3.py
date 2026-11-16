@@ -68,7 +68,7 @@ def test_h3_profile_follows_the_served_model_on_any_host():
     assert providers._profile_adapter({**H3, 'url': 'https://ark.cn-beijing.volces.com/api/plan/v3', 'modelId': 'doubao-seedance-2.0'}) is None
 
 
-@pytest.mark.parametrize('seconds,frames', [(5, 124), (1, 107), (4, 107), (10, 243), (60, 345)])
+@pytest.mark.parametrize('seconds,frames', [(4, 107), (107 / 24, 107), (4.5, 124), (5, 124), (10, 243), (14.375, 345), (15, 362), (124.5 / 24, 124)])
 def test_lengths_snap_to_the_h3_frame_grid(seconds, frames):
     assert h3_frames(seconds) == frames
 

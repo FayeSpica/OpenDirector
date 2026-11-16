@@ -143,6 +143,12 @@ def test_fractional_duration_is_published_only_for_vllm_omni():
     config = dict(kind='video', url='http://model.test/v1', modelId='MiniMaxAI/MiniMax-H3', protocol='vllm_omni')
     assert input_rules(config)['fractionalDuration'] is True
     validate_video_duration(config, 6.583333, '480P')
+    for model_id in ('FastH3-Omni', 'generic-video'):
+        other = {**config, 'modelId': model_id, 'videoCapabilities': {
+            'outputs': [{'resolution': '480P', 'width': 832, 'height': 480, 'durations': [4, 8]}],
+            'defaultResolution': '480P', 'defaultDuration': 4, 'dimensionStep': 16}}
+        assert input_rules(other)['fractionalDuration'] is True
+        validate_video_duration(other, 6.583333, '480P')
     official = dict(kind='video', url='https://api.minimax.cn/v2', modelId='MiniMax-H3', protocol='minimax_video_v2')
     assert input_rules(official).get('fractionalDuration', False) is False
     with pytest.raises(ProjectError):

@@ -26,9 +26,9 @@ RATIOS = {'16:9', '9:16', '1:1', '4:3', '3:4'}
 
 
 def h3_frames(seconds):
-    """Nearest H3 length on the 17n+5 frame grid, within 4-15 seconds."""
-    steps = round((seconds * FPS - 5) / 17)
-    return 17 * min(max(steps, 6), 20) + 5
+    """Align H3 frames upward, matching the vLLM-Omni shape planner."""
+    frames = round(seconds * FPS)
+    return frames + (5 - frames) % 17
 
 
 def _upload(data_uri, name):
