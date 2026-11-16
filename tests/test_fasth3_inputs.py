@@ -336,8 +336,9 @@ def test_native_prompt_and_full_duration_reach_actual_video_multipart():
             fields = {part.get_param('name', header='content-disposition'): part.get_payload(decode=True)
                       for part in message.iter_parts() if part.get_filename() is None}
             assert fields['prompt'].decode() == '替换<Video 1>的人物为<Picture 1>'
-            assert fields['seconds'] == b'15'
-            assert json.loads(fields['extra_params'])['duration'] == 15
+            assert fields['num_frames'] == b'362'
+            assert fields['fps'] == b'24' and 'seconds' not in fields
+            assert 'duration' not in json.loads(fields['extra_params'])
             assert request.content.count(b'name="input_references"') == 2
             assert b'video-bytes' in request.content
             return httpx.Response(200, json={'id': 'verified-wire'})

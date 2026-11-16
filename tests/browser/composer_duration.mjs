@@ -56,7 +56,7 @@ const config = await call("/api/model-configs", {
   url: "http://127.0.0.1:12345/v1",
   apiKey: "fixture-only",
   connectionType: "api",
-  protocol: "volcengine",
+  protocol: "vllm_omni",
   authMode: "bearer",
   videoCapabilities: {
     outputs: [

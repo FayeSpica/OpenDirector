@@ -34,6 +34,7 @@ from opendirector.domain.video_output import apply_video_resolution
 from opendirector.ports.gateway import gateway
 from opendirector.integrations.http_settings import MODEL_JOB_CONTEXT
 from opendirector.integrations.fasth3 import video_parameters
+from opendirector.integrations.vllm_omni import FPS, video_frame_parameters
 from opendirector.integrations.model_adapters import capabilities_of
 from opendirector.integrations.providers import GenerationProviders
 from opendirector.media.filenames import with_extension
@@ -196,9 +197,6 @@ class CreationGeneration(GenerationRuntime):
             seconds = intent.get('durationSeconds')
             if rules['profile'] == 'fasth3-omni':
                 params = video_parameters(node, records, duration_seconds=seconds)
-                # FastH3's wire contract sends duration; its derived frame
-                # estimate is not an explicitly submitted execution parameter.
-                params.pop('num_frames', None)
                 params['seed'] = new_seed()
             elif rules['profile'] == 'standard-video':
                 params = {}
@@ -227,9 +225,8 @@ class CreationGeneration(GenerationRuntime):
                     params['ratio'] = '16:9'
             else:
                 apply_video_resolution(params, node, records, config, output)
-            if rules['profile'] == 'vllm-omni-h3':
-                from opendirector.integrations.vllm_omni import FPS, h3_frames
-                params.update(fps=FPS, num_frames=h3_frames(params['duration']))
+            if rules['profile'] in {'vllm-omni-h3', 'fasth3-omni'} and 'duration' in params:
+                params.update(video_frame_parameters(params['duration'], params.get('fps', FPS)))
         if spec.kind in {'image', 'video'} and config['protocol'] == 'volcengine':
             params['watermark'] = not self.settings.get()['removeWatermark']
         if spec.kind == 'image' and input_rules(config)['profile'] == 'moss-image':

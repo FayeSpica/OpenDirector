@@ -98,7 +98,7 @@ def capability_fields(config, rules):
         validate_cogvideo_outputs(capabilities)
     if rules['profile'] == 'kling-official':
         validate_kling_outputs(capabilities, config['modelId'])
-    if config.get('kind') == 'video' and config.get('protocol') == 'vllm_omni':
+    if rules['profile'] in {'vllm-omni-h3', 'fasth3-omni'}:
         rules['fractionalDuration'] = True
     rules['videoCapabilities'] = capabilities
     rules['outputResolutions'] = [item['resolution'] for item in capabilities['outputs']] if capabilities else []
@@ -157,6 +157,8 @@ def check_video_config(kind, protocol, adapter, capabilities):
 def validate_video_duration(config, seconds, resolution=None):
     from opendirector.domain.input_rules import input_rules
     rules = input_rules(config)
+    if config.get('protocol') == 'vllm_omni' and not rules.get('fractionalDuration', False) and not float(seconds).is_integer():
+        raise ProjectError('当前模型的分辨率与时长组合不受支持，请重新选择；未提交生成。')
     capabilities = rules.get('videoCapabilities')
     if capabilities:
         choices = [item for item in capabilities['outputs']

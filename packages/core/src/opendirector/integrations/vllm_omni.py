@@ -25,10 +25,8 @@ FPS = 24
 RATIOS = {'16:9', '9:16', '1:1', '4:3', '3:4'}
 
 
-def h3_frames(seconds):
-    """Align H3 frames upward, matching the vLLM-Omni shape planner."""
-    frames = round(seconds * FPS)
-    return frames + (5 - frames) % 17
+def video_frame_parameters(seconds: float, fps: int = FPS, num_frames: int | None = None) -> dict[str, int]:
+    return {'fps': fps, 'num_frames': num_frames if num_frames is not None else round(seconds * fps)}
 
 
 def _upload(data_uri, name):
@@ -66,9 +64,9 @@ class VllmOmniGeneration:
         mode = task.get('videoMode', 'first_frame')
         seconds = task['parameters'].get('duration', 5)
         ratio = task['parameters'].get('ratio')
+        frames = video_frame_parameters(seconds, task['parameters'].get('fps', FPS), task['parameters'].get('num_frames'))
         fields = {'model': config['modelId'], 'prompt': prepared['prompt'],
-                  'fps': str(task['parameters'].get('fps', FPS)),
-                  'num_frames': str(task['parameters'].get('num_frames', h3_frames(seconds)))}
+                  **{key: str(value) for key, value in frames.items()}}
         if task['parameters'].get('resolution') and task['parameters'].get('size'):
             fields['size'] = task['parameters']['size']
         files, extra = [], {}
