@@ -31,3 +31,7 @@ Use **Manage terminal command** in the application menu to install the launcher 
 This is the shared application for #363. Platform installers, signing and distribution are #364–#366; automatic updates are #367. Browser rendering still requires the application process. Closing the application cannot finish a browser export in the background. Microphone access is not enabled in this initial shell.
 
 Before release, run the complete clean-machine acceptance in #363 on each declared platform: Agent-assisted creation and tool use, editing, export, reopen, failure recovery, duplicate launch and locks. A successful smoke check alone is insufficient. OS/architecture support and signing status must be recorded with each platform's acceptance evidence.
+
+## Release packages
+
+The desktop release workflow builds an unsigned Apple Silicon DMG and an unsigned Windows x64 NSIS installer. It checks both packages on their native runners before attaching them and their SHA-256 files to the same draft release. Windows changes also run the installer smoke check on pull requests that touch desktop packaging.
