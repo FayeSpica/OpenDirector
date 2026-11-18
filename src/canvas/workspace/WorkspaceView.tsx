@@ -361,6 +361,19 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
     }).then(success => { if (success) setEditProjectNameId(id); });
   };
 
+  const [showSwitching, setShowSwitching] = useState(false);
+  useEffect(() => {
+    if (!switching) {
+      setShowSwitching(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowSwitching(true), 200);
+    return () => window.clearTimeout(timer);
+  }, [switching]);
+  const switchingStatus = switching && showSwitching
+    ? t("canvas.workspace.loading.switching")
+    : "";
+
   const workspace = (
     <div
       inert={!ready || switching}
@@ -890,7 +903,7 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
           <NodeInfoButton nodes={doc.nodes} />
           <span className="cw-save-status" title={saveStatusText}>
             <i className={saveStatus.state === "saved" ? "saved" : ""} />
-            {saveStatusText}
+            {desktop && desktopSidebarOpen ? saveStatusText : switchingStatus || saveStatusText}
           </span>
           {saveStatus.state === "failed" && (
             <div className="cw-save-conflict-actions">
@@ -972,6 +985,7 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
         </div>
       </header>
       {desktop && <DesktopSidebar open={desktopSidebarOpen} currentId={doc.id}
+        switchingStatus={switchingStatus}
         disabled={!ready || switching || projectRenaming}
         onToggle={() => setDesktopSidebarOpen(value => !value)}
         onCreate={createDesktopProject}
@@ -2836,7 +2850,7 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
           onInsert={insertLibraryItems}
         />
       )}
-      {(!ready || switching) && (
+      {!ready && (
         <div className="canvas-loading-screen" role="status">
           {initializationError ? (
             <div role="alert">
@@ -2847,7 +2861,7 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
           ) : (
             <span className="canvas-loading-message">
               <span className="canvas-loading-spinner" aria-hidden="true" />
-              {t(switching ? "canvas.workspace.loading.switching" : "canvas.workspace.loading.opening")}
+              {t("canvas.workspace.loading.opening")}
             </span>
           )}
         </div>

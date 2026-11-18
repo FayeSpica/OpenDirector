@@ -295,14 +295,16 @@ export function useWorkspaceDocument(rt: WorkspaceRuntime) {
       const fitAll =
         fit ||
         (next.viewPersisted === false && next.nodes.length > 0);
-      requestAnimationFrame(() => {
+      if (flow.viewportInitialized) {
         void flow.setViewport(next.viewport);
-        if (fitAll)
-          requestAnimationFrame(
-            () =>
-              void flow.fitView({ padding: 0.25, maxZoom: 1, duration: 250 }),
-          );
-      });
+      } else {
+        requestAnimationFrame(() => void flow.setViewport(next.viewport));
+      }
+      if (fitAll) {
+        requestAnimationFrame(() =>
+          void flow.fitView({ padding: 0.25, maxZoom: 1, duration: 250 }),
+        );
+      }
     },
     [flow],
   );

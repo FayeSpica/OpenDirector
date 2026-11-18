@@ -7,8 +7,8 @@ import { CanvasIcon } from "../CanvasIcon";
 import { ProjectDeleteDialog } from "../ProjectDeleteDialog";
 import logo from "../../assets/open_director_logo.png";
 
-export function DesktopSidebar({ open, currentId, disabled, onToggle, onCreate, onSelect, onDelete, onSettings }: {
-  open: boolean; currentId: string; disabled: boolean; onToggle: () => void;
+export function DesktopSidebar({ open, currentId, switchingStatus, disabled, onToggle, onCreate, onSelect, onDelete, onSettings }: {
+  open: boolean; currentId: string; switchingStatus: string; disabled: boolean; onToggle: () => void;
   onDelete: (project: WorkspaceProject) => Promise<void>;
   onCreate: () => void; onSelect: (project: WorkspaceProject) => Promise<boolean>; onSettings: () => void;
 }) {
@@ -98,7 +98,7 @@ export function DesktopSidebar({ open, currentId, disabled, onToggle, onCreate, 
         <span className="od-sidebar-create-shortcut" aria-hidden="true"><kbd>{modifier}</kbd><kbd>N</kbd></span>
       </button>
       <div className="od-sidebar-heading" ref={searchRoot}>
-        {searching ? <div className="od-sidebar-search-field">
+        {searching && !switchingStatus ? <div className="od-sidebar-search-field">
           <CanvasIcon name="search" size={12} aria-hidden="true" />
           <input ref={searchInput} className="od-sidebar-search" type="search" value={query}
             aria-label={t("canvas.project.search")} placeholder={t("canvas.project.search")}
@@ -106,7 +106,7 @@ export function DesktopSidebar({ open, currentId, disabled, onToggle, onCreate, 
             onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeSearch(); } }} />
           <button className="od-sidebar-search-close" type="button" onClick={closeSearch} aria-label={t("common.close")}><CanvasIcon name="close" size={14} /></button>
         </div> : <>
-          <span className="od-sidebar-label">{t("desktop.sidebar.projects")}</span>
+          <span className="od-sidebar-label">{switchingStatus || t("desktop.sidebar.projects")}</span>
           <button ref={searchButton} className="od-sidebar-search-toggle" type="button" onClick={() => setSearching(true)}
             aria-label={t("canvas.project.search")} aria-expanded={false} aria-keyshortcuts="Meta+K Control+K" title={`${t("canvas.project.search")} (${modifier}K)`}><CanvasIcon name="search" size={14} /></button>
         </>}

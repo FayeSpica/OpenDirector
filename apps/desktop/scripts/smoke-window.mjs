@@ -182,15 +182,23 @@ export async function smokeWindow({ window, host, getLocale }) {
     result.projectDeletion = true;
   }
   for (let attempt = 0; attempt < 8; attempt++) {
-    const name = await window.webContents.executeJavaScript(`(() => {
+    const switched = await window.webContents.executeJavaScript(`(async () => {
       const target = document.querySelector('.od-sidebar-project-select:not([aria-current]):not(:disabled)');
+      const canvas = document.querySelector('.react-flow');
       for (let click = 0; click < 5; click++) target.click();
-      return target.textContent;
+      const deadline = performance.now() + 5000;
+      do {
+        await new Promise(requestAnimationFrame);
+        if (document.querySelector('.canvas-loading-screen') ||
+            document.querySelector('.react-flow') !== canvas) {
+          throw new Error('Project switch obscured or replaced the canvas surface');
+        }
+        if (target.matches('[aria-current="page"]') &&
+            document.querySelector('.cw-workspace[aria-busy="false"]')) return true;
+      } while (performance.now() < deadline);
+      return false;
     })()`);
-    await waitFor(() => window.webContents.executeJavaScript(`(
-      document.querySelector('.cw-workspace[aria-busy="false"]') &&
-      document.querySelector('.od-sidebar-project-select[aria-current="page"]')?.textContent === ${JSON.stringify(name)}
-    )`), 'Rapid project switching did not settle');
+    if (!switched) throw new Error('Rapid project switching did not settle');
   }
   result.sidebarFinallyOpen = process.env.OPENDIRECTOR_DESKTOP_SMOKE_SIDEBAR === 'open';
   if (await window.webContents.executeJavaScript("document.querySelector('.cw-workspace').dataset.desktopSidebar === 'open'") !== result.sidebarFinallyOpen) {
