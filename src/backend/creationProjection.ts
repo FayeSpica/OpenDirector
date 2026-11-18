@@ -1,5 +1,6 @@
 /** React Flow is a projection. These adapters translate typed editor/media
  * values; no browser URL is ever put into the authoritative project. */
+import { dataUrlToBlob } from "../canvas/downloadAssets.ts";
 import type {
   Asset,
   AssetRef,
@@ -167,6 +168,7 @@ export class CreationProjection {
         if (!resource.src) throw new Error(tNow("errors.backend.mediaEmpty"));
         let blob: Blob;
         if (existing) blob = await this.client.blob(existing.id);
+        else if (/^data:/i.test(resource.src)) blob = dataUrlToBlob(resource.src);
         else {
           const response = await fetch(resource.src);
           if (!response.ok)
