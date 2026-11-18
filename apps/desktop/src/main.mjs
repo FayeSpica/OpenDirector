@@ -1,3 +1,4 @@
+import { finished } from 'node:stream/promises';
 import { z } from 'zod';
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell, nativeTheme } from 'electron';
 import { createWriteStream, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -137,6 +138,8 @@ async function start() {
   await window.loadURL('opendirector://app/');
   window.show();
   if (process.argv.includes('--smoke')) {
+    // Keep Electron alive after destroying the final window to verify Host shutdown.
+    app.on('window-all-closed', () => {});
     try {
       const result = await window.webContents.executeJavaScript(`(async () => {
         const r = await fetch('/api/health', {headers: {'X-OpenDirector-Request': '1'}});
@@ -255,7 +258,8 @@ async function start() {
       quitting = true;
       window.destroy();
       if (!(await host.stop())) throw new Error('Host exited without confirming session cleanup');
-      log.write(`smoke ${JSON.stringify(result)}\n`);
+      log.end(`smoke ${JSON.stringify(result)}\n`);
+      await finished(log);
       app.exit(0);
     } catch (error) { log.write(`smoke failed ${error.message}\n`); quitting = true; window?.destroy(); await host.stop(); app.exit(1); }
   }

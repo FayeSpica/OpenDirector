@@ -2,7 +2,7 @@ name: Desktop release
 
 on:
   push:
-    tags: ['v0.1.4-desktop-test.5.mac.1']
+    tags: ['v0.1.4-desktop-test.5.mac.2']
 
 permissions:
   contents: read
