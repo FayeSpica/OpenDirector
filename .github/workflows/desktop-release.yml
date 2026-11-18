@@ -2,7 +2,7 @@ name: Desktop release
 
 on:
   push:
-    tags: ['v0.1.4-desktop-test.5.mac.2']
+    tags: ['v0.1.4-desktop-test.5.mac.3']
 
 permissions:
   contents: read
@@ -33,13 +33,18 @@ jobs:
       - name: Prepare build tools
         run: |
           command -v uv >/dev/null || brew install uv
+          cache="$RUNNER_TOOL_CACHE/opendirector-media/b6.1.2-rc.1/arm64"
           media="$RUNNER_TEMP/desktop-media"
           mkdir -p "$media"
           for tool in ffmpeg ffprobe; do
-            curl --fail --silent --show-error --location --retry 3 \
-              "https://github.com/descriptinc/ffmpeg-ffprobe-static/releases/download/b6.1.2-rc.1/${tool}-darwin-arm64" \
-              --output "$media/$tool"
-            chmod +x "$media/$tool"
+            if [ -x "$cache/$tool" ]; then
+              cp "$cache/$tool" "$media/$tool"
+            else
+              curl --fail --silent --show-error --location --retry 3 \
+                "https://github.com/descriptinc/ffmpeg-ffprobe-static/releases/download/b6.1.2-rc.1/${tool}-darwin-arm64" \
+                --output "$media/$tool"
+              chmod +x "$media/$tool"
+            fi
             "$media/$tool" -version
           done
           echo "OPENDIRECTOR_FFMPEG_DIR=$media" >> "$GITHUB_ENV"
