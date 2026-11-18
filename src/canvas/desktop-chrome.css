@@ -215,6 +215,9 @@ html[data-desktop-chrome][data-desktop-fullscreen] .cw-workspace[data-desktop-si
 html[data-desktop-chrome] .cw-workspace .cw-rail-shell { left: var(--od-sidebar-width); transition: left 200ms ease; }
 html[data-desktop-chrome] .cw-workspace .cw-empty { left: calc(50% + var(--od-sidebar-width) / 2); width: min(calc(80vw - var(--od-sidebar-width)), 600px); }
 html[data-desktop-chrome] .cw-workspace:not([data-assistant-open="true"]) .cw-top-actions { transform: none; }
+html[data-desktop-chrome] .cw-workspace .cw-assistant-panel {
+  top: calc(var(--desktop-toolbar-height) + 14px);
+}
 
 .od-sidebar-heading {
   display: flex;
