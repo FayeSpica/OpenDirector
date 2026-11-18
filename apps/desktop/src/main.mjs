@@ -157,10 +157,10 @@ async function start() {
   });
   if (process.platform === 'win32') window.setMenuBarVisibility(false);
   if (desktopChrome) {
-    const fullscreen = () => window.webContents.send('desktop:fullscreen', window.isFullScreen());
-    window.on('enter-full-screen', fullscreen);
-    window.on('leave-full-screen', fullscreen);
-    window.webContents.on('did-finish-load', fullscreen);
+    const fullscreen = value => window.webContents.send('desktop:fullscreen', value);
+    window.on('enter-full-screen', () => fullscreen(true));
+    window.on('leave-full-screen', () => fullscreen(false));
+    window.webContents.on('did-finish-load', () => fullscreen(window.isFullScreen()));
     if (process.platform === 'darwin') {
       for (const event of ['minimize', 'hide', 'restore', 'show']) window.on(event, applyBackdrop);
     }
@@ -205,7 +205,7 @@ async function start() {
       if (!(await host.stop())) throw new Error('Host exited without confirming session cleanup');
       log.write(`smoke ${JSON.stringify(result)}\n`);
       app.exit(0);
-    } catch (error) { log.write(`smoke failed ${error.message}\n`); quitting = true; window?.destroy(); await host.stop(); app.exit(1); }
+    } catch (error) { log.write(`smoke failed ${error.stack ?? error.message}\n`); quitting = true; window?.destroy(); await host.stop(); app.exit(1); }
   }
 }
 
