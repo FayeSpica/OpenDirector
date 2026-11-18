@@ -280,10 +280,10 @@ html[data-desktop-chrome][data-theme="light"] .od-sidebar-search::placeholder { 
 .od-project-sidebar nav .od-sidebar-project-menu button:hover { background: #ffffff0d; }
 
 
-html[data-desktop-platform="win32"] .cw-topbar {
+html[data-desktop-platform="win32"] .cw-workspace .cw-topbar {
   padding-right: calc(12px + 100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px));
 }
-html[data-desktop-platform="win32"][data-desktop-fullscreen] .cw-topbar { padding-right: 16px; }
+html[data-desktop-platform="win32"][data-desktop-fullscreen] .cw-workspace .cw-topbar { padding-right: 16px; }
 html[data-desktop-platform="win32"] .cw-workspace[data-desktop-sidebar="closed"] .cw-topbar { padding-left: 92px; }
 html[data-desktop-platform="win32"] .cw-workspace[data-desktop-sidebar="closed"] .od-caption-actions { left: 12px; }
 html[data-desktop-platform="win32"] .od-project-sidebar { background-color: #272735; }

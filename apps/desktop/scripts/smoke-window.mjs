@@ -22,11 +22,23 @@ export async function smokeWindow({ window, host, getLocale }) {
   if (await window.webContents.executeJavaScript('!!document.querySelector("dialog[open]")')) throw new Error('A dialog obscures the canvas');
   if (process.platform === 'win32') {
     if (window.isMenuBarVisible()) throw new Error('Windows application menu is visible');
-    await waitFor(() => window.webContents.executeJavaScript(`(() => {
-      const overlay = navigator.windowControlsOverlay;
-      const actions = document.querySelector('.cw-top-actions');
-      return overlay?.visible && actions && actions.getBoundingClientRect().right <= overlay.getTitlebarAreaRect().right;
-    })()`), 'Window controls overlap the workspace toolbar');
+    let bounds;
+    try {
+      await waitFor(async () => {
+        bounds = await window.webContents.executeJavaScript(`(() => {
+          const overlay = navigator.windowControlsOverlay;
+          const actions = document.querySelector('.cw-top-actions');
+          return {
+            visible: overlay?.visible,
+            titlebarRight: overlay?.getTitlebarAreaRect().right,
+            toolbarRight: actions?.getBoundingClientRect().right,
+          };
+        })()`);
+        return bounds.visible && bounds.toolbarRight <= bounds.titlebarRight;
+      }, 'Window controls overlap the workspace toolbar');
+    } catch (error) {
+      throw new Error(`${error.message}: ${JSON.stringify(bounds)}`, { cause: error });
+    }
   }
   result.sidebarInitiallyOpen = await window.webContents.executeJavaScript("document.querySelector('.cw-workspace').dataset.desktopSidebar === 'open'");
   if (!result.sidebarInitiallyOpen) {
