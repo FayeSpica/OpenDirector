@@ -1,5 +1,5 @@
-import { app } from 'electron';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { app, BrowserWindow } from 'electron';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -20,30 +20,22 @@ export async function smokeWindow({ window, host, getLocale }) {
   await window.webContents.executeJavaScript('document.querySelector(".cw-welcome-secondary")?.click()');
   await delay(300);
   if (await window.webContents.executeJavaScript('!!document.querySelector("dialog[open]")')) throw new Error('A dialog obscures the canvas');
-  if (process.platform === 'win32') {
-    if (window.isMenuBarVisible()) throw new Error('Windows application menu is visible');
-    let bounds;
-    try {
-      await waitFor(async () => {
-        bounds = await window.webContents.executeJavaScript(`(() => {
-          const overlay = navigator.windowControlsOverlay;
-          const actions = document.querySelector('.cw-top-actions');
-          return {
-            visible: overlay?.visible,
-            titlebarRight: overlay?.getTitlebarAreaRect().right,
-            toolbarRight: actions?.getBoundingClientRect().right,
-          };
-        })()`);
-        return bounds.visible && bounds.toolbarRight <= bounds.titlebarRight;
-      }, 'Window controls overlap the workspace toolbar');
-    } catch (error) {
-      throw new Error(`${error.message}: ${JSON.stringify(bounds)}`, { cause: error });
-    }
-  }
+  if (process.platform === 'win32') await checkWindowsCaption(window);
+  if (result.projectIds.length === 1) await smokeTraceWindows(window, result.projectIds[0]);
   result.sidebarInitiallyOpen = await window.webContents.executeJavaScript("document.querySelector('.cw-workspace').dataset.desktopSidebar === 'open'");
   if (!result.sidebarInitiallyOpen) {
     await window.webContents.executeJavaScript("document.querySelector('.od-caption-actions button').click()");
     await waitFor(() => window.webContents.executeJavaScript("document.querySelector('.cw-workspace').dataset.desktopSidebar === 'open'"), 'Sidebar did not expand');
+  }
+  if (process.platform === 'win32') {
+    const bounds = window.getBounds();
+    try {
+      window.setSize(800, bounds.height);
+      await waitFor(() => window.webContents.executeJavaScript('innerWidth <= 800'), 'Windows test window did not resize');
+      await checkWindowsCaption(window);
+    } finally {
+      window.setBounds(bounds);
+    }
   }
   if (result.projectIds.length === 1) {
     await window.webContents.executeJavaScript("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: navigator.platform.startsWith('Mac'), ctrlKey: !navigator.platform.startsWith('Mac'), bubbles: true }))");
@@ -199,6 +191,68 @@ export async function smokeWindow({ window, host, getLocale }) {
   window.close();
   if (window.isVisible() || !(await host.inspect())) throw new Error('Closing a window stopped the Host');
   return result;
+}
+
+async function checkWindowsCaption(window) {
+  if (window.isMenuBarVisible()) throw new Error('Windows application menu is visible');
+  let bounds;
+  try {
+    await waitFor(async () => {
+      bounds = await window.webContents.executeJavaScript(`(() => {
+        const overlay = navigator.windowControlsOverlay;
+        const actions = document.querySelector('.cw-top-actions');
+        return {
+          visible: overlay?.visible,
+          titlebarRight: overlay?.getTitlebarAreaRect().right,
+          toolbarRight: actions?.getBoundingClientRect().right,
+        };
+      })()`);
+      return bounds.visible && bounds.toolbarRight <= bounds.titlebarRight;
+    }, 'Window controls overlap the workspace toolbar');
+  } catch (error) {
+    throw new Error(`${error.message}: ${JSON.stringify(bounds)}`, { cause: error });
+  }
+}
+
+async function smokeTraceWindows(window, projectId) {
+  const evaluate = code => window.webContents.executeJavaScript(code);
+  const projectPath = await evaluate(`fetch('/api/creation/projects', {headers: {'X-OpenDirector-Request': '1'}})
+    .then(response => response.json()).then(({projects}) => projects.find(project => project.id === '${projectId}').path)`);
+  const folder = join(projectPath, 'agent-runs');
+  mkdirSync(folder, { recursive: true });
+  await evaluate("document.querySelector('.cw-chat-button').click()");
+  const editor = ".cw-assistant-composer [contenteditable=true]";
+  await waitFor(() => evaluate(`!!document.querySelector(${JSON.stringify(editor)})`), 'Assistant composer did not open');
+  await evaluate(`document.querySelector(${JSON.stringify(editor)}).focus()`);
+  await window.webContents.insertText('Draft before opening trace');
+  const draft = () => evaluate(`document.querySelector(${JSON.stringify(editor)})?.textContent`);
+  await waitFor(async () => (await draft())?.includes('Draft before opening trace'), 'Assistant draft input was not accepted');
+
+  for (const live of [false, true]) {
+    const turn = live ? '00000000-0000-4000-8000-000000000002' : '00000000-0000-4000-8000-000000000001';
+    const file = join(folder, `${turn}.opencode.jsonl`);
+    const event = text => JSON.stringify({ type: 'model.reasoning', text }) + '\n';
+    const first = live ? 'Live trace begins' : 'Historical trace';
+    writeFileSync(file, event(first));
+    const query = new URLSearchParams({ traceProject: projectId, turn, runtime: 'opencode', ...(live ? { live: '1' } : {}) });
+    await evaluate(`window.open('/?${query}', '_blank', 'noopener,noreferrer'); undefined`);
+    const child = await waitFor(() => BrowserWindow.getAllWindows().find(item =>
+      item.getParentWindow() === window && item.webContents.getURL().includes(turn)), 'Desktop trace did not open in its own window');
+    const contains = text => child.webContents.executeJavaScript(
+      `document.querySelector('.cw-trace-page')?.innerText.includes(${JSON.stringify(text)})`);
+    await waitFor(() => contains(first), 'Trace window did not read the stored trace');
+    appendFileSync(file, event('Trace file updated'));
+    if (live) await waitFor(() => contains('Trace file updated'), 'Live trace did not refresh');
+    else if (await contains('Trace file updated')) throw new Error('Historical trace unexpectedly refreshed');
+    child.close();
+    await waitFor(() => child.isDestroyed(), 'Trace window did not close');
+    if (!(await draft())?.includes('Draft before opening trace')) throw new Error('Closing the trace lost the assistant draft');
+  }
+  window.focus();
+  await evaluate(`document.querySelector(${JSON.stringify(editor)}).focus()`);
+  await window.webContents.insertText(' and continued afterward');
+  await waitFor(async () => (await draft())?.includes('continued afterward'), 'Assistant composer stopped accepting input');
+  await evaluate("document.querySelector('.cw-chat-button').click()");
 }
 
 async function waitFor(check, message, attempts = 150) {

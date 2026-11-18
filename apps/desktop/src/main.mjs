@@ -157,8 +157,29 @@ async function start() {
       for (const event of ['minimize', 'hide', 'restore', 'show']) window.on(event, applyBackdrop);
     }
   }
+  const traceURL = url => {
+    const target = new URL(url);
+    return ownedURL(url) && target.pathname === '/' && target.searchParams.has('traceProject');
+  };
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (new URL(url).protocol === 'https:') void shell.openExternal(url);
+    if (traceURL(url)) {
+      const trace = new BrowserWindow({
+        parent: window, width: 1100, height: 760,
+        webPreferences: { session: ownedSession, nodeIntegration: false,
+          contextIsolation: true, sandbox: true, webSecurity: true },
+      });
+      if (process.platform !== 'darwin') trace.removeMenu();
+      trace.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+      trace.webContents.on('will-navigate', (event, target) => {
+        if (!traceURL(target)) event.preventDefault();
+      });
+      void trace.loadURL(url).catch(error => {
+        log.write(`Trace window failed: ${error.message}\n`);
+        if (!trace.isDestroyed()) trace.destroy();
+      });
+    } else if (new URL(url).protocol === 'https:') {
+      void shell.openExternal(url);
+    }
     return { action: 'deny' };
   });
   window.webContents.on('will-navigate', (event, url) => { if (!ownedURL(url)) event.preventDefault(); });
