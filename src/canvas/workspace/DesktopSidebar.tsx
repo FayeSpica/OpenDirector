@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { listWorkspaceProjects, projectDeleteMode, type WorkspaceProject } from "../../backend/workspace";
+import { listWorkspaceProjects, peekWorkspaceProjects, projectDeleteMode, subscribeWorkspaceProjects, type WorkspaceProject } from "../../backend/workspace";
 import { errorMessage } from "../../backend/api";
 import { useT } from "../../i18n/I18nProvider";
 import { IconButton } from "./workspaceChrome";
@@ -15,7 +15,7 @@ export function DesktopSidebar({ open, currentId, switchingStatus, disabled, onT
   const t = useT();
   const mac = document.documentElement.dataset.desktopPlatform === "darwin";
   const modifier = mac ? "⌘" : "Ctrl+";
-  const [projects, setProjects] = useState<WorkspaceProject[]>([]);
+  const [projects, setProjects] = useState<WorkspaceProject[]>(() => peekWorkspaceProjects()?.projects ?? []);
   const [actions, setActions] = useState<{ id: string; top: number; left: number } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WorkspaceProject | null>(null);
   const [recycleBin, setRecycleBin] = useState(false);
@@ -85,11 +85,25 @@ export function DesktopSidebar({ open, currentId, switchingStatus, disabled, onT
     void projectDeleteMode().then(mode => {
       if (active) setRecycleBin(mode.projectDelete === "recycle_bin");
     }).catch(() => { if (active) setRecycleBin(false); });
-    void listWorkspaceProjects().then(result => {
-      if (active) { setProjects(result.projects); setError(result.warnings.join("\n")); }
-    }).catch(error => { if (active) setError(errorMessage(error)); });
-    return () => { active = false; };
-  }, [open, currentId]);
+    let latestRead = 0;
+    const refreshProjects = () => {
+      const read = ++latestRead;
+      void listWorkspaceProjects().then(result => {
+        if (active && read === latestRead) {
+          setProjects(result.projects);
+          setError(result.warnings.join("\n"));
+        }
+      }).catch(error => {
+        if (active && read === latestRead) setError(errorMessage(error));
+      });
+    };
+    const unsubscribe = subscribeWorkspaceProjects(refreshProjects);
+    refreshProjects();
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [open]);
   return <div className="od-desktop-navigation">
     <aside id="od-project-sidebar" className="od-project-sidebar" inert={!open} aria-hidden={!open}>
       <div className="od-sidebar-brand"><img src={logo} alt=""/>OpenDirector</div>
@@ -98,7 +112,7 @@ export function DesktopSidebar({ open, currentId, switchingStatus, disabled, onT
         <span className="od-sidebar-create-shortcut" aria-hidden="true"><kbd>{modifier}</kbd><kbd>N</kbd></span>
       </button>
       <div className="od-sidebar-heading" ref={searchRoot}>
-        {searching && !switchingStatus ? <div className="od-sidebar-search-field">
+        {searching ? <div className="od-sidebar-search-field">
           <CanvasIcon name="search" size={12} aria-hidden="true" />
           <input ref={searchInput} className="od-sidebar-search" type="search" value={query}
             aria-label={t("canvas.project.search")} placeholder={t("canvas.project.search")}
@@ -106,11 +120,12 @@ export function DesktopSidebar({ open, currentId, switchingStatus, disabled, onT
             onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeSearch(); } }} />
           <button className="od-sidebar-search-close" type="button" onClick={closeSearch} aria-label={t("common.close")}><CanvasIcon name="close" size={14} /></button>
         </div> : <>
-          <span className="od-sidebar-label">{switchingStatus || t("desktop.sidebar.projects")}</span>
+          <span className="od-sidebar-label">{t("desktop.sidebar.projects")}</span>
           <button ref={searchButton} className="od-sidebar-search-toggle" type="button" onClick={() => setSearching(true)}
             aria-label={t("canvas.project.search")} aria-expanded={false} aria-keyshortcuts="Meta+K Control+K" title={`${t("canvas.project.search")} (${modifier}K)`}><CanvasIcon name="search" size={14} /></button>
         </>}
       </div>
+      <span className="od-sidebar-switch-status" role="status">{switchingStatus}</span>
       <nav aria-label={t("desktop.sidebar.projects")}>
         {filteredProjects.map(project => <div className="od-sidebar-project-row" key={project.id}
           ref={actions?.id === project.id ? menuRoot : undefined}

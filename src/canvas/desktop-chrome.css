@@ -188,6 +188,14 @@ html[data-desktop-chrome][data-theme="light"] .cw-workspace .cw-topbar { backgro
 html[data-desktop-chrome][data-theme="light"] .od-sidebar-create { background: #ffffff8c; border-color: #484e7030; }
 html[data-desktop-chrome][data-theme="light"] .od-sidebar-create:hover { background: #ffffff4d; }
 html[data-desktop-chrome][data-theme="light"] .od-sidebar-create-shortcut { color: #6d7280; }
+.od-sidebar-switch-status {
+  position: absolute;
+  right: 22px;
+  bottom: 24px;
+  font-size: 11px;
+  color: inherit;
+  pointer-events: none;
+}
 .od-sidebar-label { padding: 0 10px; font-size: 11px; color: #a1a3b4; }
 .od-project-sidebar nav { flex: 1; overflow: auto; min-height: 0; }
 .od-project-sidebar nav button { display: flex; align-items: center; gap: 9px; width: 100%; padding: 10px; margin-bottom: 3px; border: 0; border-radius: 7px; background: transparent; color: #d5d7e1; text-align: left; font-size: 12px; }
