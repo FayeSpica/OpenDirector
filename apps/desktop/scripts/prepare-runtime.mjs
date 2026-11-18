@@ -1,6 +1,6 @@
 /** Build-host prerequisites: uv, Node/npm and a standalone FFmpeg/ffprobe directory. */
 import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,11 +14,23 @@ function run(command, args, cwd = root) {
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} exited ${result.status}`);
 }
+// runtime/ is a generated artifact: start from a clean distribution so a Python build from an earlier
+// run cannot be packaged beside the one this run installs.
+const pythonDirectory = join(runtime, 'python');
+rmSync(pythonDirectory, { recursive: true, force: true });
 mkdirSync(join(runtime, 'bin'), { recursive: true });
-run('uv', ['python', 'install', '3.12', '--install-dir', join(runtime, 'python'), '--no-bin']);
-const distribution = readdirSync(join(runtime, 'python')).find(name => name.startsWith('cpython-3.12') && name.includes(process.arch === 'arm64' ? 'aarch64' : 'x86_64'));
-if (!distribution) throw new Error('Missing standalone Python distribution');
-const python = join(runtime, 'python', distribution, process.platform === 'win32' ? 'python.exe' : 'bin/python3');
+run('uv', ['python', 'install', '3.12', '--install-dir', pythonDirectory, '--no-bin']);
+const architecture = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
+const installations = readdirSync(pythonDirectory, { withFileTypes: true });
+// uv leaves a version-less alias beside the concrete distribution (a symlink on POSIX, a junction on
+// Windows). A Windows-target package dereferences that link while archiving, so keeping it would copy
+// the whole runtime twice and roughly double the installer size and install time.
+for (const entry of installations) if (entry.isSymbolicLink()) rmSync(join(pythonDirectory, entry.name));
+const distributions = installations.filter(entry => entry.isDirectory() && !entry.isSymbolicLink() &&
+  entry.name.startsWith('cpython-3.12') && entry.name.includes(architecture));
+if (distributions.length !== 1) throw new Error(`Expected exactly one standalone Python distribution, found ${distributions.length}`);
+const distribution = distributions[0].name;
+const python = join(pythonDirectory, distribution, process.platform === 'win32' ? 'python.exe' : 'bin/python3');
 const wheels = join(root, 'build/desktop-wheel');
 mkdirSync(wheels, { recursive: true });
 run('uv', ['build', '--wheel', '--out-dir', wheels]);
