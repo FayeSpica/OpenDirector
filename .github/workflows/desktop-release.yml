@@ -146,7 +146,7 @@ jobs:
           New-Item -ItemType Directory -Path release-assets | Out-Null
           Copy-Item $installer.FullName release-assets
           $hash = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash.ToLowerInvariant()
-          "$hash  $name" | Set-Content -Encoding ascii "release-assets/$name.sha256"
+          [IO.File]::WriteAllText((Join-Path (Get-Location) "release-assets/$name.sha256"), "$hash  $name`n")
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-windows
