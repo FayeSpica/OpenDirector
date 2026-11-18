@@ -80,20 +80,17 @@ async function manageCommand() {
   const { response } = await dialog.showMessageBox(window, { message: text().command, detail: destination,
     buttons: [text().install, text().remove, text().cancel], cancelId: 2 });
   if (response === 2) return;
+  if (response === 1) {
+    await dialog.showMessageBox(window, { message: text().commandRemoveHelp, detail: destination });
+    return;
+  }
   try {
-    const receipt = join(userData, 'command-registration.json');
-    let previousLauncher;
-    try {
-      const previous = JSON.parse(readFileSync(receipt, 'utf8'));
-      if (previous.destination === destination && typeof previous.launcher === 'string') previousLauncher = previous.launcher;
-    } catch (error) { if (error.code !== 'ENOENT') throw error; }
     const launcher = join(runtime, 'bin', process.platform === 'win32' ? 'opendirector.cmd' : 'opendirector');
-    await registerCommand({ destination, previousLauncher, launcher, remove: response === 1 });
-    writeFileSync(receipt, JSON.stringify({ destination, launcher }), { mode: 0o600 });
-    await dialog.showMessageBox(window, { message: text().commandDone, detail: destination });
+    const result = await registerCommand({ destination, launcher });
+    await dialog.showMessageBox(window, { message: text()[result === 'installed' ? 'commandDone' : 'commandAlreadyInstalled'], detail: destination });
   } catch (error) {
     await dialog.showMessageBox(window, { type: 'error', message: text().failed,
-      detail: error.message === 'command_collision' ? text().collision : error.message });
+      detail: error.message === 'command_collision' ? [text().collision, destination].join('\n') : error.message });
   }
 }
 

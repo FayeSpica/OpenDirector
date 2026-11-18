@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { eventSchema, proxyRequest } from '../src/host.mjs';
 import { messages } from '../src/locale.mjs';
 import { registerCommand } from '../src/command.mjs';
-import { mkdtemp, readlink, rm, writeFile, lstat } from 'node:fs/promises';
+import { mkdtemp, readlink, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -41,20 +41,18 @@ test('Native dialogs have matching bilingual keys', () => {
   assert.deepEqual(Object.keys(messages['en-US']).sort(), Object.keys(messages['zh-CN']).sort());
 });
 
-test('Command registration refuses collisions and only removes its own launcher', async () => {
+test('Command registration preserves existing files and supports repeated installation', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'od-command-'));
   const destination = join(directory, 'opendirector');
   const launcher = join(directory, 'launcher');
   try {
     await writeFile(destination, 'another installation');
     await assert.rejects(registerCommand({ destination, launcher }), /command_collision/);
-    await assert.rejects(registerCommand({ destination, launcher, remove: true }), /command_collision/);
+    assert.equal(await readFile(destination, 'utf8'), 'another installation');
     await rm(destination);
-    await registerCommand({ destination, launcher });
+    assert.equal(await registerCommand({ destination, launcher }), 'installed');
     if (process.platform !== 'win32') assert.equal(await readlink(destination), launcher);
-    await registerCommand({ destination, launcher });
-    await registerCommand({ destination, launcher, remove: true });
-    await assert.rejects(lstat(destination), { code: 'ENOENT' });
+    assert.equal(await registerCommand({ destination, launcher }), 'already_installed');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
@@ -65,16 +63,21 @@ test('Proxy never follows redirects carrying the desktop credential', async () =
   assert.equal(response.status, 502);
 });
 
-test('Command repair after moving the app only replaces the recorded launcher', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'od-command-move-'));
+test('Concurrent command installs preserve the winning launcher', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'od-command-race-'));
   const destination = join(directory, 'opendirector');
-  const previousLauncher = join(directory, 'old-app');
-  const launcher = join(directory, 'new-app');
+  const launchers = ['first', 'second'].map(name => join(directory, name));
   try {
-    await registerCommand({ destination, launcher: previousLauncher });
-    await assert.rejects(registerCommand({ destination, launcher }), /command_collision/);
-    await registerCommand({ destination, launcher, previousLauncher });
-    if (process.platform !== 'win32') assert.equal(await readlink(destination), launcher);
-    await registerCommand({ destination, launcher, remove: true });
+    const results = await Promise.allSettled(launchers.map(launcher =>
+      registerCommand({ destination, launcher })));
+    const winner = results.findIndex(result => result.status === 'fulfilled');
+    assert.notEqual(winner, -1);
+    assert.deepEqual(results[winner], { status: 'fulfilled', value: 'installed' });
+    assert.match(results[1 - winner].reason?.message ?? '', /^command_collision$/);
+    if (process.platform === 'win32') {
+      assert.equal(await readFile(destination, 'utf8'), `@"${launchers[winner]}" %*\r\n`);
+    } else {
+      assert.equal(await readlink(destination), launchers[winner]);
+    }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

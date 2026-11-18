@@ -24,7 +24,7 @@ The smoke check launches the actual packaged executable with isolated temporary 
 
 ## Terminal command
 
-Use **Manage terminal command** in the application menu to install, repair or remove the launcher in `~/.local/bin`. Add that directory to PATH if needed. Existing unrelated commands are never overwritten. `opendirector desktop` opens this installation; `opendirector serve` runs the ordinary standalone API. Business CLI commands retain their existing `--url`, project, session and revision rules. Automatic attachment of an external CLI to the private desktop Host is not available.
+Use **Manage terminal command** in the application menu to install the launcher in `~/.local/bin`. Add that directory to PATH if needed. The app preserves existing entries. To uninstall or repair an old installation, check the path shown in the app and manually remove the OpenDirector entry. To repair it, run Install again. `opendirector desktop` opens this installation; `opendirector serve` runs the ordinary standalone API. Business CLI commands retain their existing `--url`, project, session and revision rules. Automatic attachment of an external CLI to the private desktop Host is not available.
 
 ## Delivery boundary
 

@@ -24,7 +24,7 @@ node apps/desktop/scripts/smoke.mjs /absolute/path/to/packaged/OpenDirector
 
 ## 终端命令
 
-通过应用菜单的“管理终端命令”在 `~/.local/bin` 安装、修复或移除启动器，必要时将该目录加入 PATH。不会覆盖其他安装。`opendirector desktop` 打开此安装的桌面应用；`opendirector serve` 运行独立 API。业务命令沿用 `--url`、工程、会话和版本规则，目前不支持外部 CLI 自动连接桌面私有 Host。
+通过应用菜单的“管理终端命令”在 `~/.local/bin` 安装启动器，必要时将该目录加入 PATH。应用会保留已有入口。如需卸载或修复旧安装，请检查应用显示的路径，确认入口属于 OpenDirector 后手动移除。修复时再点一次安装。`opendirector desktop` 打开此安装的桌面应用；`opendirector serve` 运行独立 API。业务命令沿用 `--url`、工程、会话和版本规则，目前不支持外部 CLI 自动连接桌面私有 Host。
 
 ## 交付边界
 
