@@ -1,6 +1,6 @@
 {
   "name": "@opendirector/desktop",
-  "version": "0.1.4",
+  "version": "0.1.4-desktop-test.5",
   "private": true,
   "type": "module",
   "main": "src/main.mjs",
