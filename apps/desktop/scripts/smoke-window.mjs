@@ -135,14 +135,16 @@ export async function smokeWindow({ window, host, getLocale }) {
         drag: getComputedStyle(header).getPropertyValue('-webkit-app-region') };
     })()`);
     if (chrome.top !== 0 || chrome.canvasTop !== 48 || chrome.padding !== '20px' || chrome.drag !== 'drag') throw new Error('Desktop chrome layout failed: ' + JSON.stringify(chrome));
-    app.focus({ steal: true });
     window.show();
+    app.focus({ steal: true });
     window.focus();
-    await delay(500);
+    await waitFor(() => window.isVisible() && window.isFocused(), 'Desktop window could not take focus before fullscreen');
     for (const fullscreen of [true, false]) {
       window.setFullScreen(fullscreen);
+      await waitFor(() => window.isFullScreen() === fullscreen,
+        `Native fullscreen transition failed: target=${fullscreen}`);
       await waitFor(() => window.webContents.executeJavaScript(`document.documentElement.hasAttribute('data-desktop-fullscreen') === ${fullscreen}`),
-        `Fullscreen chrome synchronization failed: target=${fullscreen}`, 100);
+        `Fullscreen chrome synchronization failed: target=${fullscreen}`);
     }
     await window.webContents.executeJavaScript("document.querySelector('.od-caption-actions button').click()");
     await delay(500);
@@ -177,10 +179,15 @@ export async function smokeWindow({ window, host, getLocale }) {
       const response = await fetch('/api/creation/projects', {headers: {'X-OpenDirector-Request': '1'}});
       const value = await response.json();
       return !document.querySelector('dialog[open]') && !!document.querySelector('.cw-save-status i.saved') &&
+        !!document.querySelector('.cw-workspace[aria-busy=false]') &&
+        !!document.querySelector('.od-sidebar-project-select[aria-current=page]') &&
         JSON.stringify(value.projects.map(p => p.id).sort()) === '${JSON.stringify(result.projectIds)}';
     })()`), 'Deleting the open test project did not restore the remaining projects');
     result.projectDeletion = true;
   }
+  await waitFor(() => window.webContents.executeJavaScript(
+    "!!document.querySelector('.od-sidebar-project-select:not([aria-current]):not(:disabled)')"),
+    'No other editable project was available for rapid switching');
   for (let attempt = 0; attempt < 8; attempt++) {
     const switched = await window.webContents.executeJavaScript(`(async () => {
       const target = document.querySelector('.od-sidebar-project-select:not([aria-current]):not(:disabled)');
