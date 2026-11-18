@@ -134,7 +134,15 @@ async function start() {
   await host.ready;
   const ownedSession = session.fromPartition('persist:opendirector');
   ownedSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  let projectSubscription;
   ownedSession.protocol.handle('opendirector', request => proxyRequest(request, host, async (url, options) => {
+    const pathname = new URL(url).pathname;
+    if (options.method === 'GET' && /^\/api\/creation\/projects\/[^/]+\/subscribe$/.test(pathname)) {
+      // Chromium can leave the upstream stream open after the renderer switches projects.
+      projectSubscription?.abort();
+      projectSubscription = new AbortController();
+      options.signal = AbortSignal.any([options.signal, projectSubscription.signal]);
+    }
     const response = await net.fetch(url, options);
     if (response.status >= 400) log.write(`Host request ${options.method} ${new URL(url).pathname}: ${response.status}\n`);
     return response;

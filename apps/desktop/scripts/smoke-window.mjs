@@ -181,6 +181,17 @@ export async function smokeWindow({ window, host, getLocale }) {
     })()`), 'Deleting the open test project did not restore the remaining projects');
     result.projectDeletion = true;
   }
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const name = await window.webContents.executeJavaScript(`(() => {
+      const target = document.querySelector('.od-sidebar-project-select:not([aria-current]):not(:disabled)');
+      for (let click = 0; click < 5; click++) target.click();
+      return target.textContent;
+    })()`);
+    await waitFor(() => window.webContents.executeJavaScript(`(
+      document.querySelector('.cw-workspace[aria-busy="false"]') &&
+      document.querySelector('.od-sidebar-project-select[aria-current="page"]')?.textContent === ${JSON.stringify(name)}
+    )`), 'Rapid project switching did not settle');
+  }
   result.sidebarFinallyOpen = process.env.OPENDIRECTOR_DESKTOP_SMOKE_SIDEBAR === 'open';
   if (await window.webContents.executeJavaScript("document.querySelector('.cw-workspace').dataset.desktopSidebar === 'open'") !== result.sidebarFinallyOpen) {
     await window.webContents.executeJavaScript("document.querySelector('.od-caption-actions button').click()");
