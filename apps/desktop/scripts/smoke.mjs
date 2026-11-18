@@ -6,6 +6,8 @@ import { spawn } from 'node:child_process';
 const binary = process.argv[2];
 if (!binary) throw new Error('Usage: node scripts/smoke.mjs /path/to/packaged/OpenDirector');
 const directory = await mkdtemp(join(tmpdir(), 'opendirector-desktop-'));
+const logPath = join(directory, 'logs/desktop.log');
+let logOffset = 0;
 let previous;
 try {
  for (let attempt = 0; attempt < 2; attempt++) {
@@ -15,9 +17,11 @@ try {
     child.once('error', reject);
     child.once('close', resolve);
   }).finally(() => clearTimeout(timeout));
-  const log = await readFile(join(directory, 'logs/desktop.log'), 'utf8');
-  if (result !== 0 || !log.includes('"health":{"status":"ok"}')) throw new Error(`Packaged desktop smoke failed (${result}):\n${log}`);
-  const latest = log.split('\n').filter(line => line.startsWith('smoke ')).at(-1);
+  const log = await readFile(logPath, 'utf8');
+  const currentLog = log.slice(logOffset);
+  logOffset = log.length;
+  const latest = currentLog.split('\n').findLast(line => line.startsWith('smoke {'));
+  if (result !== 0 || !latest) throw new Error(`Packaged desktop smoke failed on launch ${attempt + 1} (${result}):\n${currentLog}`);
   const current = JSON.parse(latest.slice(6)).projectIds;
   if (previous && JSON.stringify(previous) !== JSON.stringify(current)) throw new Error('Reopening changed the project identities');
   previous = current;

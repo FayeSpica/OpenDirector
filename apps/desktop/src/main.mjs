@@ -145,19 +145,24 @@ async function start() {
         return {health, projects: projects.status, isolated: typeof require === 'undefined', bridge: !!window.opendirectorDesktop};
       })()`);
       if (result.health.status !== 'ok' || result.projects !== 200 || !result.isolated || !result.bridge) throw new Error('Desktop smoke failed');
-      let rendered = false;
-      for (let attempt = 0; attempt < 150; attempt++) {
-        if (await window.webContents.executeJavaScript('document.querySelectorAll("button").length > 2')) { rendered = true; break; }
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      if (!rendered) throw new Error('Workbench did not become interactive');
-      await window.webContents.executeJavaScript('document.querySelector(".cw-welcome-secondary")?.click()');
       let canvasReady = false;
-      for (let attempt = 0; attempt < 150; attempt++) {
-        if (await window.webContents.executeJavaScript('!!document.querySelector(".react-flow") && !!document.querySelector(".cw-save-status i.saved")')) { canvasReady = true; break; }
+      for (let attempt = 0; attempt < 300; attempt++) {
+        canvasReady = await window.webContents.executeJavaScript(`(() => {
+          const skip = document.querySelector('.cw-welcome-secondary');
+          if (skip && !skip.disabled) skip.click();
+          return !!document.querySelector('.react-flow') && !!document.querySelector('.cw-save-status i.saved');
+        })()`);
+        if (canvasReady) break;
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      if (!canvasReady) throw new Error('Canvas did not open');
+      if (!canvasReady) {
+        const state = await window.webContents.executeJavaScript(`JSON.stringify({
+          canvas: !!document.querySelector('.react-flow'),
+          save: document.querySelector('.cw-save-status')?.textContent,
+          text: document.body.innerText.slice(0, 800),
+        })`);
+        throw new Error(`Canvas did not open: ${state}`);
+      }
       for (let attempt = 0; attempt < 150; attempt++) {
       result.projectIds = await window.webContents.executeJavaScript(`fetch('/api/creation/projects', {headers: {'X-OpenDirector-Request': '1'}}).then(r => r.json()).then(value => value.projects.map(project => project.id).sort())`);
         if (result.projectIds.length) break;
