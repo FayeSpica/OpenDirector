@@ -1,4 +1,6 @@
 export const canvasShell = {
+  "desktop.sidebar.saveFailed": "Could not save the sidebar state. Your choice may not be restored after restarting.",
+  "desktop.sidebar.newProject": "New project",
   "desktop.sidebar.toggle": "Toggle project sidebar",
   "desktop.sidebar.projects": "Projects",
   "canvas.project.search": "Search projects",

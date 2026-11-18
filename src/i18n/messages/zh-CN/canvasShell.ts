@@ -1,5 +1,7 @@
 /** Canvas search, notifications, project switching and selection toolbars. */
 export const canvasShell = {
+  "desktop.sidebar.saveFailed": "无法保存侧栏开闭状态，重启后可能无法恢复本次选择。",
+  "desktop.sidebar.newProject": "新建项目",
   "desktop.sidebar.toggle": "展开或收起项目侧栏",
   "desktop.sidebar.projects": "项目",
   "canvas.project.search": "搜索项目",

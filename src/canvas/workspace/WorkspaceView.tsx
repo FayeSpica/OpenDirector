@@ -337,7 +337,15 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
   }, [outputState?.output.id]);
 
   const desktop = !!window.opendirectorDesktop;
-  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(() => {
+    try { return desktop && localStorage.getItem("opendirector.desktop.sidebar.v1") === "open"; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    if (!desktop) return;
+    try { localStorage.setItem("opendirector.desktop.sidebar.v1", desktopSidebarOpen ? "open" : "closed"); }
+    catch { notify(t("desktop.sidebar.saveFailed")); }
+  }, [desktop, desktopSidebarOpen]);
   const createDesktopProject = () => {
     const id = crypto.randomUUID();
     void switchDocument(async () => {
@@ -835,12 +843,6 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
           }}
         />
       )}
-      {desktop && <DesktopSidebar open={desktopSidebarOpen} currentId={doc.id}
-        disabled={!ready || switching || projectRenaming}
-        onToggle={() => setDesktopSidebarOpen(value => !value)}
-        onCreate={createDesktopProject}
-        onSelect={project => switchDocument(() => openWorkspaceProject(project))}
-        onSettings={() => setSettingsOpen(true)} />}
       <header className="cw-topbar">
         <div className="cw-project-heading">
           <img
@@ -954,6 +956,8 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
             size={20}
             onClick={exportDocument}
           />
+          {desktop && window.opendirectorDesktop?.showMore && <IconButton name="more" label={t("common.more")} tooltipSide="bottom"
+            onClick={() => window.opendirectorDesktop?.showMore?.()} />}
           <input
             ref={importInput}
             type="file"
@@ -967,6 +971,13 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
           />
         </div>
       </header>
+      {desktop && <DesktopSidebar open={desktopSidebarOpen} currentId={doc.id}
+        disabled={!ready || switching || projectRenaming}
+        onToggle={() => setDesktopSidebarOpen(value => !value)}
+        onCreate={createDesktopProject}
+        onDelete={deleteProject}
+        onSelect={project => switchDocument(() => openWorkspaceProject(project))}
+        onSettings={() => setSettingsOpen(true)} />}
       <CanvasToolRail
         holdCollapsed={false}
         items={[

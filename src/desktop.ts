@@ -2,6 +2,7 @@
 export interface DesktopBridge {
   registerSession(id: string): void;
   setLocale(locale: "zh-CN" | "en-US"): void;
+  showMore?(): void;
   setExporting(active: boolean): void;
 }
 

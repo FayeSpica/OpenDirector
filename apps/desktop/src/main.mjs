@@ -9,6 +9,8 @@ import { messages, localeFor } from './locale.mjs';
 import { registerCommand, commandPath } from './command.mjs';
 
 app.setName('OpenDirector');
+const desktopChrome = ['darwin', 'win32'].includes(process.platform);
+const captionHeight = 48;
 const here = dirname(fileURLToPath(import.meta.url));
 const runtime = app.isPackaged ? join(process.resourcesPath, 'runtime') : join(here, '..', 'runtime');
 const isolated = process.env.OPENDIRECTOR_DESKTOP_DATA;
@@ -49,7 +51,9 @@ ipcMain.on('desktop:locale', (event, value) => {
   menu();
 });
 ipcMain.on('desktop:theme', (event, value) => {
-  if (trusted(event) && ['light', 'dark'].includes(value)) { nativeTheme.themeSource = value; applyBackdrop(); }
+  if (trusted(event) && ['light', 'dark'].includes(value)) { nativeTheme.themeSource = value;
+    if (process.platform === 'win32') window.setTitleBarOverlay(windowsCaption());
+    applyBackdrop(); }
 });
 ipcMain.on('desktop:session', (event, value) => {
   const parsed = z.uuid().safeParse(value);
@@ -59,19 +63,42 @@ ipcMain.on('desktop:exporting', (event, value) => {
   if (trusted(event) && typeof value === 'boolean') exporting = value;
 });
 
+function desktopActions() {
+  return [
+    { label: text().command, click: manageCommand },
+    { label: text().data, click: () => shell.openPath(workspace) },
+    { label: text().logs, click: () => shell.openPath(logs) },
+  ];
+}
+
+ipcMain.on('desktop:more', event => {
+  if (trusted(event) && desktopChrome) Menu.buildFromTemplate(desktopActions()).popup({ window });
+});
+
+function windowsCaption() {
+  const dark = nativeTheme.shouldUseDarkColors;
+  return { height: captionHeight, color: dark ? '#141414' : '#f7f8fa', symbolColor: dark ? '#eceef2' : '#30343c' };
+}
+
 function menu() {
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: text().app, submenu: [
-      { role: 'about', label: text().app },
-      { label: text().logs, click: () => shell.openPath(logs) },
-      { label: text().data, click: () => shell.openPath(workspace) },
-      { label: text().command, click: manageCommand },
-      { type: 'separator' }, { label: text().quit, accelerator: 'CmdOrCtrl+Q', click: () => app.quit() },
-    ] },
-    { label: text().edit, submenu: ['undo', 'redo', 'cut', 'copy', 'paste', 'selectAll'].map(role => ({ role, label: text()[role] })) },
-    { label: text().view, submenu: [
-      { role: 'togglefullscreen', label: text().fullscreen }, { role: 'toggleDevTools', label: text().devtools },
-    ] },
+  const editing = ['undo', 'redo', 'cut', 'copy', 'paste', 'selectAll'].map(role => ({ role, label: text()[role] }));
+  const view = [
+    { role: 'togglefullscreen', label: text().fullscreen },
+    { role: 'toggleDevTools', label: text().devtools },
+  ];
+  const quit = { label: text().quit, accelerator: 'CmdOrCtrl+Q', click: () => app.quit() };
+  const shortcuts = [...editing, ...view, quit].map(item => ({ ...item, visible: false, acceleratorWorksWhenHidden: true }));
+  if (process.platform === 'win32') {
+    Menu.setApplicationMenu(Menu.buildFromTemplate(shortcuts));
+    return;
+  }
+  const about = { role: 'about', label: text().app };
+  Menu.setApplicationMenu(Menu.buildFromTemplate(process.platform === 'darwin' ? [
+    { label: text().app, submenu: [about, quit, ...shortcuts.slice(0, -1)] },
+  ] : [
+    { label: text().app, submenu: [about, ...desktopActions(), quit] },
+    { label: text().edit, submenu: editing },
+    { label: text().view, submenu: view },
   ]));
 }
 
@@ -116,15 +143,19 @@ async function start() {
   window = new BrowserWindow({ width: 1440, height: 960, minWidth: 800, minHeight: 600, show: false, title: 'OpenDirector',
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 },
       vibrancy: 'sidebar', visualEffectState: 'active', backgroundColor: '#00000000' } : {}),
+    ...(process.platform === 'win32' ? { titleBarStyle: 'hidden', titleBarOverlay: windowsCaption() } : {}),
     webPreferences: { session: ownedSession, preload: join(here, 'preload.cjs'), nodeIntegration: false,
       contextIsolation: true, sandbox: true, webSecurity: true },
   });
-  if (process.platform === 'darwin') {
+  if (process.platform === 'win32') window.setMenuBarVisibility(false);
+  if (desktopChrome) {
     const fullscreen = () => window.webContents.send('desktop:fullscreen', window.isFullScreen());
     window.on('enter-full-screen', fullscreen);
     window.on('leave-full-screen', fullscreen);
     window.webContents.on('did-finish-load', fullscreen);
-    for (const event of ['minimize', 'hide', 'restore', 'show']) window.on(event, applyBackdrop);
+    if (process.platform === 'darwin') {
+      for (const event of ['minimize', 'hide', 'restore', 'show']) window.on(event, applyBackdrop);
+    }
   }
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (new URL(url).protocol === 'https:') void shell.openExternal(url);
@@ -138,120 +169,8 @@ async function start() {
   window.show();
   if (process.argv.includes('--smoke')) {
     try {
-      const result = await window.webContents.executeJavaScript(`(async () => {
-        const r = await fetch('/api/health', {headers: {'X-OpenDirector-Request': '1'}});
-        const health = await r.json();
-        const projects = await fetch('/api/creation/projects', {headers: {'X-OpenDirector-Request': '1'}});
-        return {health, projects: projects.status, isolated: typeof require === 'undefined', bridge: !!window.opendirectorDesktop};
-      })()`);
-      if (result.health.status !== 'ok' || result.projects !== 200 || !result.isolated || !result.bridge) throw new Error('Desktop smoke failed');
-      let canvasReady = false;
-      for (let attempt = 0; attempt < 300; attempt++) {
-        canvasReady = await window.webContents.executeJavaScript(`(() => {
-          const skip = document.querySelector('.cw-welcome-secondary');
-          if (skip && !skip.disabled) skip.click();
-          return !!document.querySelector('.react-flow') && !!document.querySelector('.cw-save-status i.saved');
-        })()`);
-        if (canvasReady) break;
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      if (!canvasReady) {
-        const state = await window.webContents.executeJavaScript(`JSON.stringify({
-          canvas: !!document.querySelector('.react-flow'),
-          save: document.querySelector('.cw-save-status')?.textContent,
-          text: document.body.innerText.slice(0, 800),
-        })`);
-        throw new Error(`Canvas did not open: ${state}`);
-      }
-      for (let attempt = 0; attempt < 150; attempt++) {
-      result.projectIds = await window.webContents.executeJavaScript(`fetch('/api/creation/projects', {headers: {'X-OpenDirector-Request': '1'}}).then(r => r.json()).then(value => value.projects.map(project => project.id).sort())`);
-        if (result.projectIds.length) break;
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      if (!result.projectIds.length) throw new Error('Canvas project was not persisted');
-      await new Promise(resolve => setTimeout(resolve, 500));
-      await window.webContents.executeJavaScript('document.querySelector(".cw-welcome-secondary")?.click()');
-      await new Promise(resolve => setTimeout(resolve, 300));
-      if (await window.webContents.executeJavaScript('!!document.querySelector("dialog[open]")')) throw new Error('A dialog obscures the canvas');
-      const evidence = process.env.OPENDIRECTOR_DESKTOP_EVIDENCE;
-      for (const language of ['en-US', 'zh-CN']) {
-        await window.webContents.executeJavaScript(`window.dispatchEvent(new StorageEvent('storage', { key: 'opendirector.locale.v1', newValue: '${language}' }))`);
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const current = await window.webContents.executeJavaScript('document.documentElement.lang');
-        if (current !== language || locale !== language) throw new Error('Desktop locale synchronization failed');
-        if (!(await window.webContents.executeJavaScript('!!document.querySelector(".react-flow") && !!document.querySelector(".cw-save-status i.saved")'))) throw new Error('Canvas was lost during language switching');
-        if (evidence) {
-          mkdirSync(evidence, { recursive: true });
-          writeFileSync(join(evidence, `desktop-${language}.png`), (await window.webContents.capturePage()).toPNG());
-          for (const state of ['expanded', 'collapsed']) {
-            if (state === 'collapsed') {
-              await window.webContents.executeJavaScript("document.querySelector('.od-caption-actions button').click()");
-              await new Promise(resolve => setTimeout(resolve, 500));
-            }
-            const placements = await window.webContents.executeJavaScript(`(() => {
-              const open = document.querySelector('.cw-workspace').dataset.desktopSidebar === 'open';
-              return { open, create: document.querySelectorAll(open ? '.od-sidebar-create' : '.od-caption-actions button').length };
-            })()`);
-            if (placements.open !== (state === 'expanded') || placements.create !== (state === 'expanded' ? 1 : 2)) throw new Error('New project button placement failed');
-            const layout = await window.webContents.executeJavaScript(`(() => {
-              const elements = ['.cw-topbar', '.cw-top-actions', '.cw-language-toggle'];
-              return { width: innerWidth, elements: elements.map(selector => { const e = document.querySelector(selector); const r = e.getBoundingClientRect(); return {selector, left:r.left, right:r.right, width:r.width, transform:getComputedStyle(e).transform}; }) };
-            })()`);
-            writeFileSync(join(evidence, `layout-${state}-${language}.json`), JSON.stringify(layout));
-            window.webContents.invalidate();
-            await new Promise(resolve => setTimeout(resolve, 200));
-            writeFileSync(join(evidence, `sidebar-${state}-${language}.png`), (await window.webContents.capturePage()).toPNG());
-          }
-          await window.webContents.executeJavaScript("document.querySelector('.od-caption-actions button').click()");
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
-      if (process.platform === 'darwin') {
-        const chrome = await window.webContents.executeJavaScript(`(() => {
-          const header = document.querySelector('.cw-topbar');
-          return { top: header.getBoundingClientRect().top,
-            canvasTop: document.querySelector('.react-flow').getBoundingClientRect().top,
-            padding: getComputedStyle(header).paddingLeft,
-            drag: getComputedStyle(header).getPropertyValue('-webkit-app-region') };
-        })()`);
-        if (chrome.top !== 0 || chrome.canvasTop !== 48 || chrome.padding !== '20px' || chrome.drag !== 'drag') throw new Error('Desktop chrome layout failed: ' + JSON.stringify(chrome));
-        app.focus({ steal: true });
-        window.show();
-        window.focus();
-        await new Promise(resolve => setTimeout(resolve, 500));
-        for (const fullscreen of [true, false]) {
-          window.setFullScreen(fullscreen);
-          let synchronized = false;
-          for (let attempt = 0; attempt < 100; attempt++) {
-            synchronized = await window.webContents.executeJavaScript(`document.documentElement.hasAttribute('data-desktop-fullscreen') === ${fullscreen}`);
-            if (synchronized) break;
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-          if (!synchronized) throw new Error('Fullscreen chrome synchronization failed: target=' + fullscreen + ', native=' + window.isFullScreen());
-        }
-        await window.webContents.executeJavaScript("document.querySelector('.od-caption-actions button').click()");
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const bounds = window.getBounds();
-        window.setSize(800, 600);
-        await new Promise(resolve => setTimeout(resolve, 200));
-        const fits = await window.webContents.executeJavaScript(`(() => {
-          const language = document.querySelector('.cw-topbar .cw-language-toggle').getBoundingClientRect();
-          const title = document.querySelector('.cw-topbar .cw-project-selector').getBoundingClientRect();
-          const actions = document.querySelector('.cw-top-actions').getBoundingClientRect();
-          return title.right <= language.left && language.right <= actions.left && actions.right <= innerWidth;
-        })()`);
-        if (!fits) throw new Error('Desktop controls overlap in a narrow window');
-        window.setBounds(bounds);
-        await new Promise(resolve => setTimeout(resolve, 200));
-        await window.webContents.executeJavaScript("document.querySelector('.od-caption-actions button').click()");
-        await new Promise(resolve => setTimeout(resolve, 500));
-        result.chrome = chrome;
-
-      }
-      await window.webContents.executeJavaScript('window.opendirectorDesktop.setExporting(true)');
-      await new Promise(resolve => setTimeout(resolve, 50));
-      window.close();
-      if (window.isVisible() || !(await host.inspect())) throw new Error('Closing a window stopped the Host');
+      const { smokeWindow } = await import('../scripts/smoke-window.mjs');
+      const result = await smokeWindow({ window, host, getLocale: () => locale });
       quitting = true;
       window.destroy();
       if (!(await host.stop())) throw new Error('Host exited without confirming session cleanup');

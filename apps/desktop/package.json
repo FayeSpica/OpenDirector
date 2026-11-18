@@ -28,6 +28,7 @@
     },
     "files": [
       "src/**",
+      "scripts/smoke-window.mjs",
       "package.json"
     ],
     "extraResources": [
