@@ -252,10 +252,10 @@ async function start() {
       await new Promise(resolve => setTimeout(resolve, 50));
       window.close();
       if (window.isVisible() || !(await host.inspect())) throw new Error('Closing a window stopped the Host');
-      log.write(`smoke ${JSON.stringify(result)}\n`);
       quitting = true;
       window.destroy();
-      await host.stop();
+      if (!(await host.stop())) throw new Error('Host exited without confirming session cleanup');
+      log.write(`smoke ${JSON.stringify(result)}\n`);
       app.exit(0);
     } catch (error) { log.write(`smoke failed ${error.message}\n`); quitting = true; window?.destroy(); await host.stop(); app.exit(1); }
   }

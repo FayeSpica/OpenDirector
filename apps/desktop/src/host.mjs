@@ -22,6 +22,7 @@ export class Host {
   pending = new Map();
   nextId = 0;
   stopping = false;
+  shutdownComplete = false;
 
   constructor({ python, env, directory, log, onExit }) {
     this.child = spawn(python, ['-I', '-m', 'opendirector_api.desktop'], {
@@ -43,6 +44,8 @@ export class Host {
           } else if (event.type === 'fatal') {
             clearTimeout(deadline);
             reject(new Error(event.message));
+          } else if (event.type === 'shutdown-complete') {
+            this.shutdownComplete = true;
           } else if (event.type === 'inspection') {
             this.pending.get(event.requestId)?.(event);
             this.pending.delete(event.requestId);
@@ -85,7 +88,10 @@ export class Host {
     if (this.child.exitCode !== null) return;
     this.child.stdin.end(JSON.stringify({ type: 'shutdown', requestId: ++this.nextId }) + '\n');
     const timeout = setTimeout(() => this.child.kill('SIGKILL'), 20_000);
-    try { await this.closed; } finally { clearTimeout(timeout); }
+    try {
+      const code = await this.closed;
+      return code === 0 && this.shutdownComplete;
+    } finally { clearTimeout(timeout); }
   }
 }
 

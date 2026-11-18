@@ -21,7 +21,7 @@ try {
   const currentLog = log.slice(logOffset);
   logOffset = log.length;
   const latest = currentLog.split('\n').findLast(line => line.startsWith('smoke {'));
-  if (result !== 0 || !latest) throw new Error(`Packaged desktop smoke failed on launch ${attempt + 1} (${result}):\n${currentLog}`);
+  if (result !== 0 || !latest) throw new Error(`Packaged desktop smoke failed on launch ${attempt + 1} (${result}):\n${log}`);
   const current = JSON.parse(latest.slice(6)).projectIds;
   if (previous && JSON.stringify(previous) !== JSON.stringify(current)) throw new Error('Reopening changed the project identities');
   previous = current;
