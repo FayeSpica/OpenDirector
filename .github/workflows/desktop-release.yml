@@ -2,33 +2,21 @@ name: Desktop release
 
 on:
   push:
-    tags: ['v*']
-  pull_request:
-    paths:
-      - '.github/workflows/desktop-release.yml'
-      - 'apps/desktop/**'
-      - 'build_backend.py'
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing release tag (for example, v0.1.4)
-        required: true
-        type: string
+    tags: ['v0.1.4-desktop-test.5.mac.1']
 
 permissions:
   contents: read
 
 concurrency:
-  group: desktop-release-${{ inputs.tag || github.ref_name }}
+  group: desktop-release-${{ github.ref_name }}
   cancel-in-progress: false
 
 env:
-  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+  RELEASE_TAG: ${{ github.ref_name }}
 
 jobs:
   macos:
-    if: github.event_name != 'pull_request'
-    runs-on: macos-latest
+    runs-on: opendirector-local-mac
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -44,7 +32,7 @@ jobs:
           test "$(uname -m)" = arm64
       - name: Prepare build tools
         run: |
-          brew install uv
+          command -v uv >/dev/null || brew install uv
           media="$RUNNER_TEMP/desktop-media"
           mkdir -p "$media"
           for tool in ffmpeg ffprobe; do
@@ -82,100 +70,3 @@ jobs:
           path: release-assets/
           compression-level: 0
           if-no-files-found: error
-
-  windows:
-    env:
-      RELEASE_TAG: ${{ github.event_name != 'pull_request' && (inputs.tag || github.ref_name) || '' }}
-    runs-on: windows-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          ref: ${{ env.RELEASE_TAG != '' && format('refs/tags/{0}', env.RELEASE_TAG) || github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version-file: .nvmrc
-      - name: Check release version and architecture
-        run: |
-          $version = node -p 'require("./apps/desktop/package.json").version'
-          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
-            "RELEASE_TAG=v$version" >> $env:GITHUB_ENV
-            $env:RELEASE_TAG = "v$version"
-          }
-          if ($env:RELEASE_TAG -ne "v$version" -or (node -p process.arch) -ne 'x64') {
-            throw 'Expected a matching release tag and Windows x64'
-          }
-      - name: Prepare build tools
-        run: |
-          choco install uv --yes --no-progress
-          if ($LASTEXITCODE -ne 0) { throw 'uv installation failed' }
-          $media = Join-Path $env:RUNNER_TEMP 'desktop-media'
-          New-Item -ItemType Directory -Path $media | Out-Null
-          foreach ($tool in 'ffmpeg', 'ffprobe') {
-            curl.exe --fail --silent --show-error --location --retry 3 `
-              "https://github.com/descriptinc/ffmpeg-ffprobe-static/releases/download/b6.1.2-rc.1/${tool}-win32-x64" `
-              --output (Join-Path $media "$tool.exe")
-            if ($LASTEXITCODE -ne 0) { throw "Failed to download $tool" }
-          }
-          "OPENDIRECTOR_FFMPEG_DIR=$media" >> $env:GITHUB_ENV
-      - name: Build Windows installer
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: |
-          npm ci --prefix apps/desktop
-          if ($LASTEXITCODE -ne 0) { throw 'Desktop dependency installation failed' }
-          npm run prepare:runtime --prefix apps/desktop
-          if ($LASTEXITCODE -ne 0) { throw 'Runtime preparation failed' }
-          npm run pack:windows --prefix apps/desktop
-          if ($LASTEXITCODE -ne 0) { throw 'Windows packaging failed' }
-      - name: Smoke-test installed application
-        run: |
-          $name = "OpenDirector-$env:RELEASE_TAG-win-x64-unsigned.exe"
-          $installer = Get-Item "apps/desktop/build/$name"
-          $install = Join-Path $env:RUNNER_TEMP 'OpenDirector'
-          $setup = Start-Process -FilePath $installer.FullName -ArgumentList "/S /D=$install" -Wait -PassThru
-          if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
-          node apps/desktop/scripts/smoke.mjs (Join-Path $install 'OpenDirector.exe')
-          if ($LASTEXITCODE -ne 0) { throw 'Installed application smoke test failed' }
-          $uninstaller = Get-Item (Join-Path $install 'Uninstall OpenDirector.exe')
-          $removal = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait -PassThru
-          if ($removal.ExitCode -ne 0 -or (Test-Path (Join-Path $install 'OpenDirector.exe'))) {
-            throw 'Uninstall failed'
-          }
-          New-Item -ItemType Directory -Path release-assets | Out-Null
-          Copy-Item $installer.FullName release-assets
-          $hash = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash.ToLowerInvariant()
-          "$hash  $name" | Set-Content -Encoding ascii "release-assets/$name.sha256"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: desktop-windows
-          path: release-assets/
-          compression-level: 0
-          if-no-files-found: error
-
-  release:
-    needs: [macos, windows]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          pattern: desktop-*
-          merge-multiple: true
-          path: release-assets
-      - name: Attach verified installers to draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          draft=$(gh api --paginate "repos/$GH_REPO/releases" \
-            --jq ".[] | select(.tag_name == \"$RELEASE_TAG\") | .draft")
-          case "$draft" in
-            true) ;;
-            '') gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes ;;
-            *) echo "::error::Release $RELEASE_TAG is already published"; exit 1 ;;
-          esac
-          gh release upload "$RELEASE_TAG" release-assets/* --clobber
