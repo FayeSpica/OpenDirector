@@ -2,7 +2,7 @@ name: Desktop release (local macOS)
 
 on:
   push:
-    tags: ['v0.1.4-desktop-test.15']
+    tags: ['v0.1.4-desktop-test.16']
 
 permissions:
   contents: read
@@ -42,13 +42,16 @@ jobs:
           name: release-source
           path: ${{ runner.temp }}/release-source
       - name: Extract release source
+        id: source
         run: |
           build=$(mktemp -d "$RUNNER_TEMP/opendirector-source.XXXXXX")
           tar -xzf "$RUNNER_TEMP/release-source/release-source.tar.gz" -C "$build"
           echo "DESKTOP_SOURCE=$build" >> "$GITHUB_ENV"
+          echo "node-version=$(< "$build/.nvmrc")" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version-file: ${{ env.DESKTOP_SOURCE }}/.nvmrc
+          node-version: ${{ steps.source.outputs.node-version }}
+          package-manager-cache: false
       - name: Check release version and architecture
         working-directory: ${{ env.DESKTOP_SOURCE }}
         run: |
