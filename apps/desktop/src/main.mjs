@@ -281,6 +281,9 @@ async function fatal(error) {
   app.quit();
 }
 
+// Keep Electron alive until the explicit quit path finishes stopping the Host.
+app.on('window-all-closed', () => {});
+
 app.on('before-quit', event => {
   if (quitting) return;
   event.preventDefault();
