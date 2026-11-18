@@ -1,7 +1,8 @@
+import { DesktopSidebar } from "./DesktopSidebar";
 import { Background, BackgroundVariant, MiniMap, SelectionMode, ViewportPortal } from "@xyflow/react";
 
 import "@xyflow/react/dist/style.css";
-import { Suspense, useEffect, type CSSProperties } from "react";
+import { Suspense, useEffect, useState, type CSSProperties } from "react";
 import { createNode } from "../model.ts";
 import { NodeVersionHistory } from "../NodeVersionHistory";
 
@@ -91,6 +92,7 @@ import { TooltipButton } from "../TooltipButton";
 import { VideoActionEditor } from "../VideoActionEditor";
 import { captureVideoEndpoint, extractVideoAudio } from "../videoActionRuntime";
 import "../workspace.css";
+import "../desktop-chrome.css";
 import type { WorkspaceRuntime } from "./runtimeTypes.ts";
 import { DirectorStage, IconButton, helpShortcuts, nodeTypes, edgeTypes, referenceSideKeys, incomingNodes } from "./workspaceChrome.tsx";
 
@@ -334,6 +336,23 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
     rt.revealCreatedNodes.current([output], doc.nodes.some((node) => node.id === output.id) ? doc.nodes : [...doc.nodes, output]);
   }, [outputState?.output.id]);
 
+  const desktop = !!window.opendirectorDesktop;
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
+  const createDesktopProject = () => {
+    const id = crypto.randomUUID();
+    void switchDocument(async () => {
+      const { projects } = await listWorkspaceProjects();
+      const names = new Set(projects.map(project => project.name));
+      const base = t("canvas.project.defaultName");
+      let name = base;
+      for (let suffix = 2; names.has(name); suffix++) name = `${base} ${suffix}`;
+      const project = await createWorkspaceProject(name, id);
+      const document = await openWorkspaceProject(project);
+      await saveWorkspaceDocument(document);
+      return document;
+    }).then(success => { if (success) setEditProjectNameId(id); });
+  };
+
   const workspace = (
     <div
       inert={!ready || switching}
@@ -341,6 +360,7 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
       className={`cw-workspace${panning ? " cw-workspace-panning" : ""}${spacePressed ? " cw-workspace-space-panning" : ""}`}
       ref={root}
       data-testid="canvas-workspace"
+      data-desktop-sidebar={desktop && desktopSidebarOpen ? "open" : "closed"}
       data-edge-motion={pageVisible}
       data-assistant-open={assistantOpen}
       data-assistant-resizing={assistantLayout.dragging}
@@ -815,6 +835,12 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
           }}
         />
       )}
+      {desktop && <DesktopSidebar open={desktopSidebarOpen} currentId={doc.id}
+        disabled={!ready || switching || projectRenaming}
+        onToggle={() => setDesktopSidebarOpen(value => !value)}
+        onCreate={createDesktopProject}
+        onSelect={project => switchDocument(() => openWorkspaceProject(project))}
+        onSettings={() => setSettingsOpen(true)} />}
       <header className="cw-topbar">
         <div className="cw-project-heading">
           <img
@@ -831,20 +857,7 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
             onSelect={(project) =>
               switchDocument(() => openWorkspaceProject(project))
             }
-            onCreate={() => {
-              const id = crypto.randomUUID();
-              void switchDocument(async () => {
-                const { projects } = await listWorkspaceProjects();
-                const names = new Set(projects.map(project => project.name));
-                const base = t("canvas.project.defaultName");
-                let name = base;
-                for (let suffix = 2; names.has(name); suffix++) name = `${base} ${suffix}`;
-                const project = await createWorkspaceProject(name, id);
-                const document = await openWorkspaceProject(project);
-                await saveWorkspaceDocument(document);
-                return document;
-              }).then(success => { if (success) setEditProjectNameId(id); });
-            }}
+            onCreate={createDesktopProject}
             onRename={renameCurrentProject}
             onRenameProject={renameProject}
             onDeleteProject={deleteProject}

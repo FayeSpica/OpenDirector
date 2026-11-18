@@ -232,7 +232,7 @@ class RunEvents:
             await self.changed.wait()
 
 
-def agent_routes(projects, generation, configs, provider=None) -> APIRouter:
+def agent_routes(projects, generation, configs, provider=None, *, active=None) -> APIRouter:
     router = APIRouter(prefix='/api/creation/projects/{project_id}/assistant')
     conversations = Conversations(projects)
     runtimes = AgentRuntimes(projects, generation, configs, provider)
@@ -257,7 +257,8 @@ def agent_routes(projects, generation, configs, provider=None) -> APIRouter:
             raise ProjectError('轨迹文件不存在。', 404)
         return FileResponse(file, media_type='text/plain', headers={'Cache-Control': 'no-store'})
 
-    active: dict[UUID, tuple[UUID, asyncio.Task, RunEvents]] = {}
+    if active is None:
+        active = {}
     admission: dict[UUID, asyncio.Lock] = {}
 
     @router.get('')

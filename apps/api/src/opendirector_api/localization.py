@@ -12,6 +12,7 @@ from opendirector.domain.timeline_errors import timeline_error_message
 from opendirector.domain.creation.commands import CommandReceipt
 
 ENGLISH_BY_CODE = {
+    "desktop_auth_required": "The desktop connection has expired. Reopen the application.",
     'image_quality_unsupported': 'This model does not support the selected image quality. Choose Auto or select another model.',
     'bigmodel_video_model': 'The BigModel video protocol supports CogVideoX-3 only.',
     'bigmodel_video_output': 'Choose a supported CogVideoX-3 pixel size and a 5- or 10-second duration. The size determines the aspect ratio.',

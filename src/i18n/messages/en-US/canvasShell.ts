@@ -1,4 +1,6 @@
 export const canvasShell = {
+  "desktop.sidebar.toggle": "Toggle project sidebar",
+  "desktop.sidebar.projects": "Projects",
   "canvas.project.search": "Search projects",
   "canvas.project.clearSearch": "Clear search",
   "canvas.project.noSearchResults": "No matching projects",

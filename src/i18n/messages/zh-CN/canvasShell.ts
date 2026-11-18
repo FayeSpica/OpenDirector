@@ -1,5 +1,7 @@
 /** Canvas search, notifications, project switching and selection toolbars. */
 export const canvasShell = {
+  "desktop.sidebar.toggle": "展开或收起项目侧栏",
+  "desktop.sidebar.projects": "项目",
   "canvas.project.search": "搜索项目",
   "canvas.project.clearSearch": "清空搜索",
   "canvas.project.noSearchResults": "没有匹配的项目",
