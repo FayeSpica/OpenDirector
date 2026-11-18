@@ -2,7 +2,7 @@ name: Desktop release (local macOS)
 
 on:
   push:
-    tags: ['v0.1.4-desktop-test.12']
+    tags: ['v0.1.4-desktop-test.14']
 
 permissions:
   contents: read
