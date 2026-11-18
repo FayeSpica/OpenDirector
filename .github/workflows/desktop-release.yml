@@ -2,7 +2,7 @@ name: Desktop release (local macOS)
 
 on:
   push:
-    tags: ['v0.1.4-desktop-test.14']
+    tags: ['v0.1.4-desktop-test.15']
 
 permissions:
   contents: read
@@ -15,19 +15,42 @@ env:
   RELEASE_TAG: ${{ github.ref_name }}
 
 jobs:
-  macos:
+  source:
     if: github.repository == 'FayeSpica/OpenDirector'
-    runs-on: opendirector-local-mac
-    timeout-minutes: 45
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: refs/tags/${{ env.RELEASE_TAG }}
           persist-credentials: false
+      - name: Archive release source
+        run: git archive --format=tar.gz --output=release-source.tar.gz HEAD
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-source
+          path: release-source.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+
+  macos:
+    needs: source
+    runs-on: opendirector-local-mac
+    timeout-minutes: 45
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-source
+          path: ${{ runner.temp }}/release-source
+      - name: Extract release source
+        run: |
+          build=$(mktemp -d "$RUNNER_TEMP/opendirector-source.XXXXXX")
+          tar -xzf "$RUNNER_TEMP/release-source/release-source.tar.gz" -C "$build"
+          echo "DESKTOP_SOURCE=$build" >> "$GITHUB_ENV"
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version-file: .nvmrc
+          node-version-file: ${{ env.DESKTOP_SOURCE }}/.nvmrc
       - name: Check release version and architecture
+        working-directory: ${{ env.DESKTOP_SOURCE }}
         run: |
           version=$(node -p 'require("./apps/desktop/package.json").version')
           if [[ "$GITHUB_REPOSITORY" == "ThinkFlowLab/OpenDirector" ]]; then
@@ -56,6 +79,7 @@ jobs:
           done
           echo "OPENDIRECTOR_FFMPEG_DIR=$media" >> "$GITHUB_ENV"
       - name: Build desktop application
+        working-directory: ${{ env.DESKTOP_SOURCE }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
@@ -63,6 +87,7 @@ jobs:
           npm run prepare:runtime --prefix apps/desktop
           npm run pack --prefix apps/desktop
       - name: Build and smoke-test DMG
+        working-directory: ${{ env.DESKTOP_SOURCE }}
         run: |
           staging="$RUNNER_TEMP/desktop-dmg"
           mount="$RUNNER_TEMP/desktop-mount"
@@ -79,7 +104,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-dmg
-          path: release-assets/
+          path: ${{ env.DESKTOP_SOURCE }}/release-assets/
           compression-level: 0
           if-no-files-found: error
 
