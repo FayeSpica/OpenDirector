@@ -45,7 +45,11 @@
     },
     "nsis": {
       "artifactName": "OpenDirector-v${version}-win-${arch}-unsigned.${ext}",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true
     },
     "linux": {
       "target": "dir",
