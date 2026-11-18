@@ -3,11 +3,6 @@ name: Desktop release
 on:
   push:
     tags: ['v*']
-  pull_request:
-    paths:
-      - '.github/workflows/desktop-release.yml'
-      - 'apps/desktop/**'
-      - 'build_backend.py'
   workflow_dispatch:
     inputs:
       tag:
@@ -27,7 +22,6 @@ env:
 
 jobs:
   macos:
-    if: github.event_name != 'pull_request'
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
@@ -90,14 +84,12 @@ jobs:
           if-no-files-found: error
 
   windows:
-    env:
-      RELEASE_TAG: ${{ github.event_name != 'pull_request' && (inputs.tag || github.ref_name) || '' }}
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ env.RELEASE_TAG != '' && format('refs/tags/{0}', env.RELEASE_TAG) || github.sha }}
+          ref: refs/tags/${{ env.RELEASE_TAG }}
           persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -105,10 +97,6 @@ jobs:
       - name: Check release version and architecture
         run: |
           $version = node -p 'require("./apps/desktop/package.json").version'
-          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
-            "RELEASE_TAG=v$version" >> $env:GITHUB_ENV
-            $env:RELEASE_TAG = "v$version"
-          }
           $tagPattern = '^v' + [regex]::Escape($version) + '$'
           if ($env:GITHUB_REPOSITORY -ne 'ThinkFlowLab/OpenDirector') {
             $tagPattern = '^v' + [regex]::Escape($version) + '(-desktop-test\.[0-9]+)?$'
@@ -166,7 +154,6 @@ jobs:
           if-no-files-found: error
 
   prepare-release:
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
