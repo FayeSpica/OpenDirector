@@ -2,9 +2,7 @@
 
 [English](desktop.md)
 
-桌面应用复用 Web UI 与 Python 业务服务。Electron 通过私有 JSON 行控制管道启动一个 Python Host，由系统分配本地端口。每次启动生成独立凭证，仅主进程转发带鉴权的请求。渲染进程使用 `opendirector://app`，没有 Node 权限，仅通过有限 IPC 登记自身编辑会话及同步语言和导出状态。
-
-应用资源只读。Electron 用户数据目录保存 `workspace/`（工程和配置）、`logs/` 与语言缓存，不搬迁或覆盖已有源码、pip 工作区。文件输入使用原生选择器，下载使用原生保存对话框。关闭窗口会隐藏窗口并保留导出；退出前检查 Agent、生成、工具和浏览器导出任务，说明中断影响后停止 Host，并仅释放本窗口登记的编辑会话；父控制管道断开时也执行相同清理。远端任务可能继续执行并产生费用，停止应用不代表已取消远端任务。
+进程职责、工程存储和退出行为见[桌面架构](../architecture/desktop.zh-CN.md)。
 
 ## 构建与检查
 
@@ -34,4 +32,4 @@ node apps/desktop/scripts/smoke.mjs /absolute/path/to/packaged/OpenDirector
 
 ## 发布安装包
 
-桌面发布工作流构建未签名的 Apple Silicon DMG 和 Windows x64 NSIS 安装包。两端在原生运行器验证通过后，将安装包和 SHA-256 校验文件上传到同一个草稿 Release。涉及桌面打包的 PR 也会运行 Windows 安装验证。
+桌面发布工作流构建 Apple Silicon DMG 和未签名的 Windows x64 NSIS 安装包。DMG 内的 App 使用 ad-hoc 签名。每个平台通过原生验证后，将安装包和 SHA-256 校验文件上传到同一个草稿 Release。macOS 任务在冒烟测试前后校验已安装 App 的签名。

@@ -2,9 +2,7 @@
 
 [中文](desktop.zh-CN.md)
 
-The desktop application reuses the Web UI and Python services. Electron owns one Python Host, started on an OS-assigned loopback port through a private JSON-lines control channel. Each launch has a fresh credential; only the main process forwards authenticated requests. The renderer uses `opendirector://app`, has no Node access, and has a narrow bridge for registering its edit-session identity and reporting language and export activity.
-
-Application resources are read-only. Electron user data contains `workspace/` (projects and configuration), `logs/` and a locale cache. Existing source or pip workspaces are not moved or overwritten. File inputs use native dialogs; downloads use the native save dialog. Closing the window hides it and keeps exports alive. Quit checks local Agent, generation, tool and renderer export activity, asks before interruption, then stops the Host and releases only edit sessions registered by its own window. The same cleanup runs when the parent control pipe closes. Remote jobs may continue and incur charges; shutdown does not claim remote cancellation.
+See [Desktop architecture](../architecture/desktop.md) for the processes, project storage, and shutdown behavior.
 
 ## Build and check
 
@@ -34,4 +32,4 @@ Before release, run the complete clean-machine acceptance in #363 on each declar
 
 ## Release packages
 
-The desktop release workflow builds an unsigned Apple Silicon DMG and an unsigned Windows x64 NSIS installer. It checks both packages on their native runners before attaching them and their SHA-256 files to the same draft release. Windows changes also run the installer smoke check on pull requests that touch desktop packaging.
+The desktop release workflow builds an Apple Silicon DMG with an ad-hoc signed App and an unsigned Windows x64 NSIS installer. Each platform uploads its installer and SHA-256 file to the shared draft release after its native checks pass. The macOS job verifies the installed App signature before and after the smoke test.

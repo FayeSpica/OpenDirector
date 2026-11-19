@@ -9,6 +9,7 @@ This directory is the entry point for the repository's shared documentation. The
 | [Development guidance](../AGENTS.md) | Product direction and enduring principles | Architecture principles or product boundaries change |
 | [Contributing](../CONTRIBUTING.md) | Label taxonomy, how to pick labels, and what a PR must satisfy | Process, labels, or submission requirements change |
 | [Unified project architecture](architecture/unified-project.md) | Business objects, shared entry points, and interaction rules | Object responsibilities, commands, persistence, or interaction rules change |
+| [Desktop architecture](architecture/desktop.md) ([中文](architecture/desktop.zh-CN.md)) | Electron, the Python Host, project storage, and shutdown behavior | Process, request, storage, or lifecycle boundaries change |
 | [Test contracts](architecture/test-contracts.md) | Test/production boundaries, how to avoid stale assertions and environment-dependent red runs | Test infrastructure, capability gates, or contract ownership change |
 | [Capability mapping contract](architecture/capability-contract.md) | Evidenced upstream vocabulary, the `(operation, profile) → capability` table, the untranslatable declarations, and how it feeds discovery | Upstream vocabulary, capability ids, or discovery matching change |
 | [Roadmap](development/roadmap.md) | Capability dependencies and delivery criteria | Scope, dependencies, or acceptance criteria change |
@@ -30,7 +31,7 @@ This directory is the entry point for the repository's shared documentation. The
 | [BigModel video](guides/bigmodel-video.md) ([中文](guides/bigmodel-video.zh-CN.md)) | CogVideoX-3 text, single-image and first/last-frame generation, task recovery and adoption | BigModel protocol, inputs, output sizes or recovery behavior change |
 | [BigModel GLM-Image](guides/bigmodel-image.md) ([中文](guides/bigmodel-image.zh-CN.md)) | Account setup, text-to-image generation, adoption and recovery | BigModel integration fields or behavior change |
 | [GLM-Image validation](development/glm-image-validation.md) | Real provider workflow screenshots and automated checks | GLM-Image acceptance is repeated |
-| [Desktop application](development/desktop.md) ([中文](development/desktop.zh-CN.md)) | Desktop Host, bundled runtime, build and acceptance boundaries | Desktop lifecycle or packaging contract changes |
+| [Desktop application](development/desktop.md) ([中文](development/desktop.zh-CN.md)) | Desktop build, CLI registration, and release checks | Build, CLI registration, or release checks change |
 | [Agent runtime](architecture/agent-runtime.md) | Agent runtime architecture | Runtime architecture changes |
 
 The root [README](../README.md) introduces the product and examples and links to quick-start and documentation. See [installation and updates](guides/installation.md) ([中文](guides/installation.zh-CN.md)) for installation, and the [user guide](guides/user-guide.md) ([中文](guides/user-guide.zh-CN.md)) for configuration, creation, and troubleshooting. The README does not contain the full manual, implementation architecture, development tests, research sources, or iteration history. Source code and generated contracts describe the implementation; architecture and roadmap documents describe goals and do not establish that a capability is already available.
