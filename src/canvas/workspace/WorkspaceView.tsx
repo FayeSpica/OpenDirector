@@ -2,7 +2,7 @@ import { DesktopSidebar } from "./DesktopSidebar";
 import { Background, BackgroundVariant, MiniMap, SelectionMode, ViewportPortal } from "@xyflow/react";
 
 import "@xyflow/react/dist/style.css";
-import { Suspense, useEffect, useState, type CSSProperties } from "react";
+import { Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createNode } from "../model.ts";
 import { NodeVersionHistory } from "../NodeVersionHistory";
 
@@ -18,8 +18,18 @@ import { TimelinePackageImport, exportTimelinePackage as exportNativeTimelinePac
 import { readLocalResource } from "../timelineExport.ts";
 import { timelinePublication } from "../../backend/timelinePublication";
 import { acknowledgeToolPlacement, cancelToolTask } from "../../backend/tools.ts";
-import { createWorkspaceProject, listWorkspaceProjects, openExampleWorkspaceProject, openWorkspaceProject, saveWorkspaceDocument, workspaceProjection } from "../../backend/workspace";
-import { exampleDocument, exampleProjectTitle, studyImage } from "../assets";
+import { createWorkspaceProject, listWorkspaceProjects, openWorkspaceProject, saveWorkspaceDocument, workspaceProjection } from "../../backend/workspace";
+import { studyImage } from "../assets";
+import { ExampleCanvasDialog } from "./example/ExampleCanvasDialog.tsx";
+import {
+  IMAGE_EXAMPLE_ID,
+  VIDEO_EXAMPLE_ID,
+  availableExamples,
+  loadExampleCatalog,
+  type ExampleEntry,
+} from "./example/exampleCatalog.ts";
+import { exampleFailureText, examplePercent } from "./example/exampleFailure.ts";
+import { useExampleImport } from "./example/useExampleImport.ts";
 
 import { AssistantPanel } from "../AssistantPanel";
 import { CanvasActionsContext } from "../CanvasActionsContext";
@@ -169,6 +179,7 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
     historyReplaying,
     importActionResultFiles,
     importActionResults,
+    importCanvasArchive,
     importCanvasSource,
     importDocument,
     importFiles,
@@ -301,6 +312,51 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
     zoom,
     zoomMenu,
   } = rt;
+
+
+  /**
+   * Example canvases: one cached catalog feeds both the empty-state buttons and
+   * the picker in the project menu.
+   */
+  const [exampleEntries, setExampleEntries] = useState<ExampleEntry[] | null>(null);
+  const [exampleLoading, setExampleLoading] = useState(false);
+  const exampleCatalog = useRef<Promise<ExampleEntry[]> | null>(null);
+  const loadExamples = () =>
+    (exampleCatalog.current ??= loadExampleCatalog().then((result) =>
+      availableExamples(result.catalog),
+    ));
+  const openExamplePicker = async () => {
+    if (exampleLoading) return;
+    setExampleLoading(true);
+    try {
+      setExampleEntries(await loadExamples());
+    } finally {
+      setExampleLoading(false);
+    }
+  };
+  const exampleImport = useExampleImport({ importCanvas: importCanvasArchive });
+  const [exampleMissing, setExampleMissing] = useState(false);
+  const runExampleButton = async (id: string) => {
+    setExampleMissing(false);
+    exampleImport.reset(IMAGE_EXAMPLE_ID);
+    exampleImport.reset(VIDEO_EXAMPLE_ID);
+    const entry = (await loadExamples()).find((item) => item.id === id);
+    if (!entry) {
+      setExampleMissing(true);
+      return;
+    }
+    // A finished import switches the document, so the bar disappears with it.
+    if (await exampleImport.start(entry)) exampleImport.reset(entry.id);
+  };
+  const exampleButtonStatus =
+    exampleImport.statuses[IMAGE_EXAMPLE_ID] ??
+    exampleImport.statuses[VIDEO_EXAMPLE_ID];
+  const exampleBusy =
+    exampleButtonStatus?.phase === "downloading" ||
+    exampleButtonStatus?.phase === "importing";
+  const exampleProgress = exampleButtonStatus
+    ? examplePercent(exampleButtonStatus)
+    : null;
 
 
   const outputState = timelineOutput.state;
@@ -873,6 +929,7 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
               switchDocument(() => openWorkspaceProject(project))
             }
             onCreate={createDesktopProject}
+            onExamples={() => void openExamplePicker()}
             onRename={renameCurrentProject}
             onRenameProject={renameProject}
             onDeleteProject={deleteProject}
@@ -1047,20 +1104,54 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
               {t("canvas.workspace.empty.configureModels")}
             </button>
             <button
-              onClick={() => {
-                void switchDocument(
-                  () =>
-                    openExampleWorkspaceProject(
-                      exampleProjectTitle(locale),
-                      () => exampleDocument(locale),
-                    ),
-                  true,
-                );
-              }}
+              disabled={exampleBusy}
+              onClick={() => void runExampleButton(IMAGE_EXAMPLE_ID)}
             >
-              {t("canvas.workspace.empty.example")} <span>↗</span>
+              <CanvasIcon name="image" size={15} />
+              {t("canvas.workspace.empty.tryImage")}
+            </button>
+            <button
+              disabled={exampleBusy}
+              onClick={() => void runExampleButton(VIDEO_EXAMPLE_ID)}
+            >
+              <CanvasIcon name="video" size={15} />
+              {t("canvas.workspace.empty.tryVideo")}
             </button>
           </div>
+          {exampleBusy && exampleButtonStatus && (
+            <div
+              className="cw-empty-example-status"
+              role="status"
+              aria-live="polite"
+            >
+              <progress
+                className="cw-example-progress"
+                aria-label={t("canvas.example.progress.label")}
+                {...(exampleProgress === null
+                  ? {}
+                  : {
+                      value: exampleButtonStatus.received ?? 0,
+                      max: exampleButtonStatus.total ?? 1,
+                    })}
+              />
+              <span>
+                {exampleButtonStatus.phase === "importing"
+                  ? t("canvas.example.state.importing")
+                  : exampleProgress === null
+                    ? t("canvas.example.state.downloading")
+                    : t("canvas.example.state.downloadingPercent", {
+                        percent: exampleProgress,
+                      })}
+              </span>
+            </div>
+          )}
+          {(exampleMissing || exampleButtonStatus?.phase === "failed") && (
+            <small className="cw-empty-example-error" role="alert">
+              {exampleMissing
+                ? t("canvas.example.error.unknown")
+                : exampleFailureText(t, exampleButtonStatus!)}
+            </small>
+          )}
           <small>{t("canvas.workspace.empty.tagline")}</small>
         </div>
       )}
@@ -2764,6 +2855,13 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
           theme={theme}
           initialCategory={settingsCategory}
           onClose={() => { dismissModelSetup(); setSettingsOpen(false); }}
+        />
+      )}
+      {exampleEntries && (
+        <ExampleCanvasDialog
+          entries={exampleEntries}
+          onClose={() => setExampleEntries(null)}
+          onImport={(archive) => importCanvasArchive(archive)}
         />
       )}
       {help && (
