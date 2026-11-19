@@ -27,6 +27,7 @@ from opendirector_api.creation import creation_routes
 from opendirector_api.agent import agent_routes
 from opendirector_api.library import library_routes
 from opendirector_api.voices import voice_routes
+from opendirector_api.examples import router as example_routes
 from opendirector_api.localization import localized_error
 from opendirector_api.models import (ModelConfigInput, ModelConfigPublic, AgentModelTest,
     ModelCapabilityRequest, ModelDiscoveryRequest, ModelBatchInput,
@@ -76,6 +77,7 @@ def create_app(store: LocalProjects | None = None, chat_provider=None, generatio
     app.include_router(agent_routes(creation_projects, creation_generation, model_configs, chat_provider, active=active_agents))
     app.include_router(library_routes(creation_projects))
     app.include_router(voice_routes(creation_generation.voices))
+    app.include_router(example_routes)
     app.state.desktop_activity = lambda: dict(
         agents=len(active_agents), generations=sum(not job.future.done() for job in creation_generation.jobs.values()),
         tools=sum(not job.done() for job in creation_tools.jobs.values()))
