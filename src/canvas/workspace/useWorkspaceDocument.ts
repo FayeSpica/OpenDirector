@@ -374,19 +374,16 @@ export function useWorkspaceDocument(rt: WorkspaceRuntime) {
       );
       if (!project) throw new Error(t("canvas.workspace.error.projectMissing"));
       const renamed = await renameWorkspaceProject(project, name);
-      const document = { ...historyRef.current.present, title: renamed.name };
+      const projectFields = { title: renamed.name, defaultNameIndex: renamed.defaultNameIndex };
+      const withProjectName = (document: CanvasDocument) => ({ ...document, ...projectFields });
+      const document = withProjectName(historyRef.current.present);
       // Project metadata must stay consistent across canvas undo/redo.
       setHistory((current) => ({
         ...current,
-        present: { ...current.present, title: renamed.name },
-        past: current.past.map((item) => ({ ...item, title: renamed.name })),
-        future: current.future.map((item) => ({
-          ...item,
-          title: renamed.name,
-        })),
-        transaction: current.transaction
-          ? { ...current.transaction, title: renamed.name }
-          : null,
+        present: withProjectName(current.present),
+        past: current.past.map(withProjectName),
+        future: current.future.map(withProjectName),
+        transaction: current.transaction ? withProjectName(current.transaction) : null,
       }));
       await saveWorkspaceDocument(document);
     } finally {

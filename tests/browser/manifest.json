@@ -58,6 +58,13 @@
       "note": "Needs --assistant-fixture services."
     },
     {
+      "file": "bilingual_defaults.mjs",
+      "fixture": true,
+      "previewSafe": true,
+      "lanes": ["gate"],
+      "note": "Requires a fresh isolated assistant fixture workspace."
+    },
+    {
       "file": "canvas_crop.mjs",
       "previewSafe": true,
       "lanes": [

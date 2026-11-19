@@ -16,8 +16,12 @@ class ProjectCreate(Contract):
     name: str = Field(min_length=1, max_length=100, pattern=r'\S', description='User-visible name.')
 
 
-class ProjectRename(ProjectCreate):
-    pass
+    defaultNameIndex: Positive | None = Field(default=None, exclude_if=lambda value: value is None,
+                                          description="Index for an automatically named initial project.")
+
+
+class ProjectRename(Contract):
+    name: str = Field(min_length=1, max_length=100, pattern=r'\S', description='User-visible name.')
 
 
 class AssetImport(Contract):

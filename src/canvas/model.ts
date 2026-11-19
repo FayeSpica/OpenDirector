@@ -279,6 +279,7 @@ export interface CanvasDocument {
   version: 1;
   id: string;
   title: string;
+  defaultNameIndex?: number | null;
   nodes: CanvasNode[];
   /** Logical sources remain usable when their presentation is hidden. */
   hiddenNodes?: CanvasNode[];

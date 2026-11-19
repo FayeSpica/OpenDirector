@@ -9224,6 +9224,20 @@
             "pattern": "\\S",
             "title": "Name",
             "type": "string"
+          },
+          "defaultNameIndex": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Index of the automatically named initial project.",
+            "title": "Defaultnameindex"
           }
         },
         "required": [
@@ -9243,6 +9257,20 @@
             "pattern": "\\S",
             "title": "Name",
             "type": "string"
+          },
+          "defaultNameIndex": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Index for an automatically named initial project.",
+            "title": "Defaultnameindex"
           }
         },
         "required": [
@@ -24744,6 +24772,20 @@
             "pattern": "\\S",
             "title": "Name",
             "type": "string"
+          },
+          "defaultNameIndex": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Index of the automatically named initial project.",
+            "title": "Defaultnameindex"
           }
         },
         "required": [
@@ -24764,6 +24806,20 @@
             "pattern": "\\S",
             "title": "Name",
             "type": "string"
+          },
+          "defaultNameIndex": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Index for an automatically named initial project.",
+            "title": "Defaultnameindex"
           }
         },
         "required": [

@@ -1,3 +1,4 @@
+import { projectDisplayName } from "../projectDisplayName";
 import { DesktopSidebar } from "./DesktopSidebar";
 import { Background, BackgroundVariant, MiniMap, SelectionMode, ViewportPortal } from "@xyflow/react";
 
@@ -923,7 +924,7 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
           <ProjectSelector
             currentId={doc.id}
             editNameForId={editProjectNameId}
-            name={doc.title}
+            name={projectDisplayName(t, doc.title, doc.defaultNameIndex)}
             disabled={!ready || switching || projectRenaming}
             onSelect={(project) =>
               switchDocument(() => openWorkspaceProject(project))
@@ -2412,7 +2413,7 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
         <AssistantPanel
           key={doc.id}
           documentId={doc.id}
-          documentTitle={doc.title}
+          documentTitle={projectDisplayName(t, doc.title, doc.defaultNameIndex)}
           catalog={backendCatalog}
           nodes={[...doc.nodes, ...(doc.hiddenNodes ?? [])]}
           visibleNodes={doc.nodes}

@@ -1,3 +1,4 @@
+import { projectDisplayName } from "../projectDisplayName";
 import { useEffect, useRef, useState } from "react";
 import { listWorkspaceProjects, peekWorkspaceProjects, projectDeleteMode, subscribeWorkspaceProjects, type WorkspaceProject } from "../../backend/workspace";
 import { errorMessage } from "../../backend/api";
@@ -78,7 +79,13 @@ export function DesktopSidebar({ open, currentId, switchingStatus, disabled, onT
     document.addEventListener("pointerdown", dismiss);
     return () => document.removeEventListener("pointerdown", dismiss);
   }, [searching, query]);
-  const filteredProjects = projects.filter(project => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const needle = query.trim().toLocaleLowerCase();
+  const filteredProjects = projects
+    .map((project) => ({
+      project,
+      displayName: projectDisplayName(t, project.name, project.defaultNameIndex),
+    }))
+    .filter(({ displayName }) => displayName.toLocaleLowerCase().includes(needle));
   useEffect(() => {
     if (!open) return;
     let active = true;
@@ -127,11 +134,11 @@ export function DesktopSidebar({ open, currentId, switchingStatus, disabled, onT
       </div>
       <span className="od-sidebar-switch-status" role="status">{switchingStatus}</span>
       <nav aria-label={t("desktop.sidebar.projects")}>
-        {filteredProjects.map(project => <div className="od-sidebar-project-row" key={project.id}
+        {filteredProjects.map(({ project, displayName }) => <div className="od-sidebar-project-row" key={project.id}
           ref={actions?.id === project.id ? menuRoot : undefined}
           onKeyDown={event => { if (event.key === "Escape" && actions?.id === project.id) { event.stopPropagation(); setActions(null); event.currentTarget.querySelector<HTMLButtonElement>(".od-sidebar-project-more")?.focus(); } }}>
-          <button className="od-sidebar-project-select" type="button" disabled={disabled} aria-current={project.id === currentId ? "page" : undefined} onClick={() => { setActions(null); void onSelect(project); }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M8 5l3 5M15 5l3 5"/></svg><span>{project.name}</span></button>
-          <button className="od-sidebar-project-more" type="button" disabled={disabled} aria-label={`${t("canvas.project.actions")}: ${project.name}`} title={t("canvas.project.actions")} aria-haspopup="menu" aria-expanded={actions?.id === project.id}
+          <button className="od-sidebar-project-select" type="button" disabled={disabled} aria-current={project.id === currentId ? "page" : undefined} onClick={() => { setActions(null); void onSelect(project); }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M8 5l3 5M15 5l3 5"/></svg><span>{displayName}</span></button>
+          <button className="od-sidebar-project-more" type="button" disabled={disabled} aria-label={`${t("canvas.project.actions")}: ${displayName}`} title={t("canvas.project.actions")} aria-haspopup="menu" aria-expanded={actions?.id === project.id}
             onClick={event => {
               const bounds = event.currentTarget.getBoundingClientRect();
               setActions(actions?.id === project.id ? null : { id: project.id, top: Math.min(bounds.bottom + 4, window.innerHeight - 60), left: bounds.right - 160 });
@@ -145,7 +152,7 @@ export function DesktopSidebar({ open, currentId, switchingStatus, disabled, onT
       {error && <p role="alert" className="od-sidebar-error">{error}</p>}
       <div className="cw-settings-control od-sidebar-settings"><IconButton name="settings" label={t("canvas.workspace.toolbar.settings")} onClick={onSettings} /></div>
     </aside>
-    {deleteTarget && <ProjectDeleteDialog name={deleteTarget.name} recycleBin={recycleBin}
+    {deleteTarget && <ProjectDeleteDialog name={projectDisplayName(t, deleteTarget.name, deleteTarget.defaultNameIndex)} recycleBin={recycleBin}
       onClose={() => setDeleteTarget(null)} onSubmit={async () => {
         await onDelete(deleteTarget);
         setProjects(items => items.filter(item => item.id !== deleteTarget.id));

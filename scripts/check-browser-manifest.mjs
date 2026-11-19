@@ -48,7 +48,8 @@ for (const entry of entries) {
 
 const KNOWN_LANES = new Set(["gate", "extended", "extendedFixture", "production", "perf", "manual"]);
 // Static harness pages do not open the workspace, so they do not see the welcome dialog.
-const welcomeExempt = new Set(["assistant_activity.mjs"]);
+// The bilingual defaults test exercises the welcome dialog itself.
+const welcomeExempt = new Set(["assistant_activity.mjs", "bilingual_defaults.mjs"]);
 for (const entry of entries) {
   const text = entry.file === undefined ? "" : fs.readFileSync(path.join(browserDir, entry.file), "utf8");
   const importsSrc = text.includes('"/src/');

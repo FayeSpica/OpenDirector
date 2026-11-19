@@ -581,6 +581,7 @@ export class CreationProjection {
     const document = {
       ...createDocument(snapshot.project.name),
       id: snapshot.project.id,
+      defaultNameIndex: snapshot.project.defaultNameIndex,
     };
     const view = await this.client.view();
     document.viewport = view.viewport;

@@ -427,7 +427,9 @@ export function AssistantPanel({
             {message.role === "assistant" && (
               <div className="cw-assistant-message-heading">
                 OpenDirector
-                {message.model && <small>{message.runtime === "deepseek"
+                {(message.modelIsCliDefault || message.model) && <small>{message.modelIsCliDefault
+                  ? t("assistant.agent.cliDefault")
+                  : message.runtime === "deepseek" && message.model
                   ? (deepseekLabels[message.model] ?? "DeepSeek Harness")
                   : message.model}</small>}
               </div>

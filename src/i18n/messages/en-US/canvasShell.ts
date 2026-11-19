@@ -8,6 +8,7 @@ export const canvasShell = {
   "canvas.project.noSearchResults": "No matching projects",
 
   "canvas.project.defaultName": "Untitled project",
+  "canvas.project.defaultNameIndexed": "Untitled project ({index})",
   "canvas.search.label": "Search nodes",
   "canvas.search.placeholder": "Search names, prompts or text",
   "canvas.search.clear": "Clear search",

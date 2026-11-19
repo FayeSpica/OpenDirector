@@ -40,6 +40,7 @@ export interface WorkspaceProject {
   id: string;
   name: string;
   path: string;
+  defaultNameIndex?: number;
 }
 export interface UnreadableWorkspaceProject {
   id: string | null;
@@ -128,9 +129,9 @@ export async function saveWorkspaceDocument(
   return;
 }
 
-export async function createWorkspaceProject(name: string, id: string) {
+export async function createWorkspaceProject(name: string, id: string, defaultNameIndex?: number) {
   // Unified creation does not acquire a lease; projection.open does that.
-  await creationClient(id).command("project.create", { name });
+  await creationClient(id).command("project.create", { name, defaultNameIndex });
   invalidateWorkspaceProjects();
   return (await listWorkspaceProjects()).projects.find(
     (project) => project.id === id,
@@ -251,7 +252,7 @@ export function initializeWorkspace() {
     if (!projects.length) {
       const id = crypto.randomUUID();
       try {
-        projects = [await createWorkspaceProject(tNow("errors.backend.untitled"), id)];
+        projects = [await createWorkspaceProject(tNow("errors.backend.untitled"), id, 1)];
       } catch (error) {
         // Another window may have created the default directory concurrently.
         if (!(error instanceof ApiError && error.status === 409)) throw error;
@@ -264,6 +265,7 @@ export function initializeWorkspace() {
                 await createWorkspaceProject(
                   tNow("errors.backend.untitledSuffix", { suffix }),
                   id,
+                  suffix,
                 ),
               ];
             } catch (conflict) {

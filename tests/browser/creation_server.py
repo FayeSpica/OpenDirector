@@ -134,7 +134,7 @@ if args.assistant_fixture:
         yield {'type': 'delta', 'text': '这是隔离测试回复。'}
 
     agent.AgentRuntimes.stream = fixture_agent
-    agent.runtime_available = lambda runtime: runtime == 'default'
+    agent.runtime_available = lambda runtime: runtime in {'default', 'codex'}
 tool_gate = asyncio.Event()
 tool_gate.set()
 tool_calls = []

@@ -9,6 +9,7 @@ export const canvasShell = {
   "canvas.project.noSearchResults": "没有匹配的项目",
 
   "canvas.project.defaultName": "未命名项目",
+  "canvas.project.defaultNameIndexed": "未命名项目（{index}）",
   "canvas.search.label": "搜索节点",
   "canvas.search.placeholder": "搜索名称、提示词或文本",
   "canvas.search.clear": "清空搜索",
