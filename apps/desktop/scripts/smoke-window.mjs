@@ -69,6 +69,13 @@ export async function smokeWindow({ window, host, getLocale }) {
     await waitFor(() => window.webContents.executeJavaScript("!!document.querySelector('.cw-save-status i.saved')"), 'New project did not finish saving');
   }
   await waitFor(() => window.webContents.executeJavaScript("!!document.querySelector('.od-project-sidebar nav button')"), 'Sidebar projects did not load');
+  // Opening a trace window can leave the native focus on its closing child.
+  // Finish the project rename and focus the main window before testing keyboard focus.
+  await waitFor(() => window.webContents.executeJavaScript("!document.querySelector('.cw-project-name-editor input')"), 'Project rename did not finish');
+  if (process.platform === 'darwin') app.focus({ steal: true });
+  window.focus();
+  window.webContents.focus();
+  await waitFor(() => window.isFocused(), 'Desktop window could not take focus before search');
   await window.webContents.executeJavaScript("document.querySelector('.od-sidebar-search-toggle').click()");
   await waitFor(() => window.webContents.executeJavaScript("document.activeElement === document.querySelector('.od-sidebar-search')"), 'Project search did not take focus');
   const firstProject = await window.webContents.executeJavaScript("document.querySelector('.od-project-sidebar nav button span').textContent");
