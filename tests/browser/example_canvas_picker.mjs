@@ -3,9 +3,8 @@
  * directly with a progress bar, the project menu still opens the full picker,
  * and a blocked page is reported instead of imported.
  *
- * The catalog ships inside the app, so the check intercepts the sample URLs
- * themselves; the fixture is a ZIP around one `.canvas`, like the real hosts
- * serve, and the failure case returns HTML like a blocked share link does.
+ * The download route returns either a ZIP around one `.canvas` or an HTML
+ * page like a blocked share link does.
  */
 import assert from "node:assert/strict";
 import { buildCanvasArchive } from "../../src/canvas/canvasArchive.ts";
@@ -48,16 +47,10 @@ const wrapper = await createZip([
 ]);
 const wrapperBytes = Buffer.from(await wrapper.arrayBuffer());
 
-// The bundled catalog points the two buttons at these hosts.
-const samplePattern = /^https:\/\/lz\.qaiu\.top\//;
-const downloadHeaders = {
-  // A cross-origin route still needs CORS headers: the app fetches, not navigates.
-  "access-control-allow-origin": "*",
-  "content-disposition": `attachment; filename="${document.title}.zip"`,
-};
+const samplePattern = "**/api/example-canvases/image-canvas/download";
 const served = (contentType = "application/octet-stream") => ({
   status: 200,
-  headers: { ...downloadHeaders, "content-type": contentType },
+  contentType,
   body: contentType === "text/html" ? "<!doctype html><html><body>请登录</body></html>" : wrapperBytes,
 });
 

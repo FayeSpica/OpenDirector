@@ -47,13 +47,15 @@ try {
   });
   await page.goto(`${base}/ai-tool/ai-canvas/${projectId}?creation=unified`);
   await page.getByText("Saved on this device", { exact: true }).waitFor();
-  const png = await page.evaluate(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 256;
-    canvas.getContext("2d").fillRect(0, 0, 256, 256);
-    return canvas.toDataURL("image/png").split(",")[1];
-  });
-  for (const name of ["first.png", "last.png"]) {
+  for (const [index, name] of ["first.png", "last.png"].entries()) {
+    const png = await page.evaluate((color) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 256;
+      const context = canvas.getContext("2d");
+      context.fillStyle = color;
+      context.fillRect(0, 0, 256, 256);
+      return canvas.toDataURL("image/png").split(",")[1];
+    }, index === 0 ? "black" : "white");
     await page
       .getByLabel("Choose local asset files", { exact: true })
       .setInputFiles({
@@ -61,11 +63,14 @@ try {
         mimeType: "image/png",
         buffer: Buffer.from(png, "base64"),
       });
-    const count = name === "first.png" ? 1 : 2;
+    const count = index + 1;
     for (let attempt = 0; attempt < 150; attempt++) {
       const current = await call(`/api/creation/projects/${projectId}`);
       if (current.canvasItems.length === count) break;
-      if (attempt === 149) throw Error(await page.locator("body").innerText());
+      if (attempt === 149) {
+        const body = await page.locator("body").innerText();
+        throw new Error(`Upload ${name}: expected ${count} canvas items, found ${current.canvasItems.length}\n${body}`);
+      }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
