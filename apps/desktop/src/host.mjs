@@ -25,7 +25,7 @@ export class Host {
   shutdownComplete = false;
 
   constructor({ python, env, directory, log, onExit }) {
-    this.child = spawn(python, ['-I', '-m', 'opendirector_api.desktop'], {
+    this.child = spawn(python, ['-I', '-B', '-m', 'opendirector_api.desktop'], {
       cwd: directory, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
     });
     this.child.stderr.pipe(log, { end: false });
