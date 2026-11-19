@@ -33,33 +33,4 @@ This directory is the entry point for the repository's shared documentation. The
 | [BigModel GLM-Image](guides/bigmodel-image.md) ([中文](guides/bigmodel-image.zh-CN.md)) | Account setup, text-to-image generation, adoption and recovery | BigModel integration fields or behavior change |
 | [GLM-Image validation](development/glm-image-validation.md) | Real provider workflow screenshots and automated checks | GLM-Image acceptance is repeated |
 | [Desktop application](development/desktop.md) ([中文](development/desktop.zh-CN.md)) | Desktop build, CLI registration, and release checks | Build, CLI registration, or release checks change |
-| [Agent runtime](architecture/agent-runtime.md) | Agent runtime architecture | Runtime architecture changes |
-
-The root [README](../README.md) introduces the product and examples and links to quick-start and documentation. See [installation and updates](guides/installation.md) ([中文](guides/installation.zh-CN.md)) for installation, and the [user guide](guides/user-guide.md) ([中文](guides/user-guide.zh-CN.md)) for configuration, creation, and troubleshooting. The README does not contain the full manual, implementation architecture, development tests, research sources, or iteration history. Source code and generated contracts describe the implementation; architecture and roadmap documents describe goals and do not establish that a capability is already available.
-
-## Directory conventions
-
-```text
-AGENTS.md                 Long-term development guidance
-README.md                 Product and getting-started entry point
-docs/
-  README.md               Documentation index and maintenance rules
-  architecture/           Architecture, business semantics, and design decisions
-  development/            Roadmap, development process, and validation
-  guides/                 Instructions for users and integrators
-```
-
-Historical material and temporary artifacts do not automatically become official documentation. Ignore rules reserve the root of `docs/` for local historical files; put new shared documents in the maintained subdirectories above and explicitly add them to Git. Do not restore all old directories or delete local material merely to tidy the index.
-
-## Maintenance rules
-
-1. **Give each fact one primary home.** Put enduring principles in the development guidance, architecture semantics in architecture documentation, and operational instructions in guides. Link from other documents to avoid divergent copies.
-2. **Separate goals, plans, and facts.** Architecture documents do not track progress; the roadmap records dependencies and gates. Prefer issues, PRs, and commit descriptions for task status, defects, and validation results.
-3. **Add focused records when needed.** Document the context, decision, alternatives, and impact of important design choices. Standalone validation records should include the code version, environment, commands, results, and limitations. Create them when there is substantive content, not as empty templates or placeholder lists.
-4. **Make explanations self-contained.** Describe designs and capabilities directly, without using another product's name as a substitute for business rules or relying on chat context, neighboring directories, or untracked files.
-5. **Update documentation with capability changes.** Changes to objects, APIs, model parameters, or save and recovery semantics should update the relevant documents in the same change. Do not leave outdated conclusions presented as current behavior.
-6. **Ship link targets with the repository.** Local targets should already be tracked or included in the same commit. Include needed images and examples; do not link to temporary files on a developer's machine.
-7. **Keep records precise.** Distinguish test doubles from real services and intended designs from verified behavior. A historical regression result does not guarantee later versions.
-8. **Stage explicit files.** Review the actual diff and stage the required documents rather than adding whole directories that may contain local history.
-
-For documentation changes, check relative links, code and command paths, formatting, and tracking scope. Documentation-only changes do not require unrelated model, media, or browser tests.
+| [Agent runtime](architecture/agent-runtime.md) | Agent runtime architecture and Job origin tracing | Runtime architecture or Job origin semantics change |

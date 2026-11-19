@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from opendirector.agent.catalog import model_choices
 from opendirector.agent.context import RunContext, RuntimeId
+from opendirector.domain.creation.base import agent_command_id
 from opendirector.agent.citations import referenced_sources, with_trace_sources
 from opendirector.agent.runtime import AgentRuntimes, runtime_available, configured_runtimes, runtime_spec, runtime_catalog, runtime_status
 from opendirector.agent.skills import skills
@@ -269,238 +270,17 @@ def agent_routes(projects, generation, configs, provider=None, *, active=None) -
             raise ProjectError('轨迹文件不存在。', 404)
         return FileResponse(file, media_type='text/plain', headers={'Cache-Control': 'no-store'})
 
+    @router.get('/turns/{turn_id}/jobs')
+    def turn_jobs(project_id: UUID, turn_id: UUID):
+        # Read-only like the trace routes: no session lease, and the Agent trace is not consulted.
+        # It reads the committed snapshot and never starts, resumes or replays a command.
+        jobs = sorted((job for job in projects.snapshot(project_id).jobs if job.agentRunId == turn_id),
+                      key=lambda job: (job.createdAt, str(job.id)))
+        return [dict(jobId=job.id, callId=job.agentCallId, commandId=agent_command_id(turn_id, job.agentCallId),
+                     status=job.status, phase=job.phase, recovery=job.recovery, resumeAllowed=job.resumeAllowed,
+                     cancelRequested=job.cancelRequested, remoteCancellation=job.remoteCancellation,
+                     errorDetails=job.errorDetails, asset=job.asset, adopted=job.adopted)
+                for job in jobs]
+
     if active is None:
         active = {}
-    admission: dict[UUID, asyncio.Lock] = {}
-
-    @router.get('')
-    async def conversation(project_id: UUID):
-        value = await asyncio.to_thread(conversations.update, project_id)
-        running = active.get(project_id)
-        # A streaming message without an active turn was interrupted (for
-        # example by a restart); with one, the client can attach to it.
-        if running and not running[1].done():
-            value = {**value, 'activeTurnId': str(running[0])}
-        return value
-
-    @router.get('/conversations')
-    async def list_conversations(project_id: UUID):
-        return await asyncio.to_thread(conversations.list, project_id)
-
-    async def change_conversation(project_id: UUID, conversation_id: UUID, session: UUID, *, create=False):
-        async with admission.setdefault(project_id, asyncio.Lock()):
-            if project_id in active:
-                raise ProjectError('请先停止或等待当前回复结束，再切换对话。', 409)
-            return await asyncio.to_thread(conversations.activate, project_id, conversation_id, str(session), create=create)
-
-    @router.post('/conversations')
-    async def new_conversation(project_id: UUID, value: ConversationCreate, x_opendirector_session: UUID = Header()):
-        return await change_conversation(project_id, value.id, x_opendirector_session, create=True)
-
-    @router.post('/conversations/{conversation_id}/activate')
-    async def activate_conversation(project_id: UUID, conversation_id: UUID, x_opendirector_session: UUID = Header()):
-        return await change_conversation(project_id, conversation_id, x_opendirector_session)
-
-    @router.put('/draft')
-    async def draft(project_id: UUID, value: Draft, x_opendirector_session: UUID = Header()):
-        return await asyncio.to_thread(conversations.update, project_id, str(x_opendirector_session), draft=value)
-
-    @router.get('/runtimes')
-    async def available_runtimes(project_id: UUID, probe: bool = True):
-        await asyncio.to_thread(conversations.path, project_id)
-        if probe:
-            return await configured_runtimes()
-        return [{**item, 'status': await runtime_status(item['id'], probe=False)}
-                for item in runtime_catalog()]
-
-    @router.get('/runtimes/{runtime}/status')
-    async def runtime_detail(project_id: UUID, runtime: Runtime):
-        await asyncio.to_thread(conversations.path, project_id)
-        item = next(item for item in runtime_catalog() if item['id'] == runtime)
-        return {**item, 'status': await runtime_status(runtime)}
-
-    @router.get('/runtimes/{runtime}/models')
-    async def runtime_models(project_id: UUID, runtime: Literal['opencode', 'codex', 'claude', 'jiuwenswarm', 'deepseek'], selected: str | None = None):
-        await asyncio.to_thread(conversations.path, project_id)
-        if runtime == 'deepseek':
-            from opendirector.agent.deepseek import model_choices as deepseek_models
-            return await deepseek_models(selected)
-        return await model_choices(runtime)
-
-    @router.get('/skills')
-    async def catalog(project_id: UUID):
-        directory = await asyncio.to_thread(conversations.path, project_id)
-        found = await skills(projects.local.repository, directory)
-        return [{key: item[key] for key in ('name', 'description', 'source')} for item in found]
-
-    @router.post('/turns/{turn_id}/stop')
-    async def stop(project_id: UUID, turn_id: UUID, x_opendirector_session: UUID = Header()):
-        await asyncio.to_thread(conversations.path, project_id, str(x_opendirector_session))
-        running = active.get(project_id)
-        if running and running[0] == turn_id:
-            with CancelScope(shield=True):
-                if not running[1].cancelling():
-                    running[1].cancel()
-                with suppress(asyncio.CancelledError):
-                    await running[1]
-        return {'ok': True}
-
-    @router.get('/turns/{turn_id}/events')
-    async def turn_events(project_id: UUID, turn_id: UUID):
-        await asyncio.to_thread(conversations.path, project_id)
-        running = active.get(project_id)
-        if not running or running[0] != turn_id:
-            raise ProjectError('这轮回复已结束，请重新读取对话。', 404)
-        return StreamingResponse(running[2].follow(), media_type='text/event-stream')
-
-    @router.post('/turns')
-    async def turn(project_id: UUID, value: Turn, x_opendirector_session: UUID = Header(),
-                   accept_language: str | None = Header(default=None, alias='Accept-Language')):
-        async with admission.setdefault(project_id, asyncio.Lock()):
-            if project_id in active:
-                raise ProjectError('当前工程已有回复正在执行。', 409)
-            session = str(x_opendirector_session)
-            directory = await asyncio.to_thread(conversations.path, project_id, session)
-            if not runtime_available(value.runtime):
-                raise ProjectError(f'{value.runtime} 未安装，请安装 CLI 并登录。', 503)
-            spec = runtime_spec(value.runtime)
-            if not spec.supportsSkills and value.skills:
-                raise ProjectError(f'{spec.label} 不支持技能，请移除技能后发送。', 409)
-            if value.runtime == 'jiuwenswarm' and value.thinking != 'auto':
-                raise ProjectError('JiuwenSwarm 当前使用原生默认推理强度。', 409)
-            config = await asyncio.to_thread(configs.resolve, str(value.modelId), 'agent') if spec.modelSource == 'settings' else None
-            if config is not None:
-                prepared = await asyncio.to_thread(generation.availability.prepare, config)
-                current = await asyncio.to_thread(configs.resolve, str(value.modelId), 'agent')
-                generation.availability.require(current, _assistant_request(current), prepared)
-                config = current
-            available = await skills(projects.local.repository, directory) if spec.supportsSkills else []
-            if set(value.skills) - {item['name'] for item in available}:
-                raise ProjectError('技能已失效，请重新选择。', 409)
-            snapshot = await asyncio.to_thread(projects.snapshot, project_id)
-            assets = {str(asset.id): asset for asset in snapshot.assets}
-            for asset_id in value.assets:
-                if str(asset_id) not in assets:
-                    raise ProjectError('引用素材不属于当前工程。', 409)
-            model = config['modelId'] if config else value.runtimeModel
-            model_is_cli_default = spec.modelSource == 'cli' and not model
-            model_selections = dict(value.modelSelections)
-            model_names = {row['id']: row['modelId'] for row in configs.list()}
-            preferences = {kind: {'modelConfigId': model_id, 'modelName': model_names.get(model_id)}
-                for kind, model_id in model_selections.items() if model_id}
-            events = RunEvents()
-            def validate_connection():
-                if config is not None:
-                    current = configs.resolve(str(value.modelId), 'agent')
-                    generation.availability.require(current, _assistant_request(current), prepared)
-            async def produce() -> None:
-                text, status, error, accepted = '', 'complete', None, False
-                activities = []
-                sources = {}
-                previous_sources = {}
-                plan = None
-                try:
-                    user = {'id': str(value.id), 'role': 'user', 'text': value.text, 'content': value.content,
-                        'assets': [{'id': str(asset.id), 'name': asset.name, 'type': asset.metadata.mimeType,
-                            'size': asset.metadata.size, 'fingerprint': asset.fingerprint}
-                            for asset in (assets[str(key)] for key in value.assets)],
-                        'skills': value.skills, 'runtime': value.runtime, 'runtimeModel': value.runtimeModel,
-                        'modelSelections': dict(value.modelSelections),
-                        'model': model, 'modelIsCliDefault': model_is_cli_default, 'status': 'complete'}
-                    saved = await asyncio.to_thread(conversations.update, project_id, session, begin=user,
-                        conversation_id=value.conversationId, before_begin=validate_connection)
-                    accepted = True
-                    events.put({'type': 'start', 'conversation': saved})
-                    previous_sources = {source['id']: source for message in saved['messages'][:-2]
-                                        for source in message.get('sources', [])}
-                    context = []
-                    for message in saved['messages'][:-1]:
-                        content = message['text'] or '(empty reply)'
-                        references = []
-                        for attachment in message.get('assets', []):
-                            asset = assets.get(attachment['id'])
-                            if asset is not None:
-                                references.append({'id': str(asset.id), 'name': attachment['name'],
-                                    'kind': asset.kind, 'path': str((directory / asset.path).resolve()),
-                                    'metadata': asset.metadata.model_dump(mode='json', exclude_none=True)})
-                        if references:
-                            content += '\nReferenced project assets: ' + json.dumps(references, ensure_ascii=False)
-                            content += '\nThese are asset references, not visual observations. Inspect media with available tools before describing its contents.'
-                        context.append({'role': message['role'], 'content': content})
-                    if preferences:
-                        context[-1]['content'] += '\nUser model preferences for this turn: ' + json.dumps(preferences, ensure_ascii=False)
-                        context[-1]['content'] += '\nUse these models for new generation unless the user explicitly requests another. If unavailable or unsuitable, explain and ask before substituting. Keep existing nodes on their configured models unless the user requests a change.'
-                    run = RunContext(runtime=value.runtime, project_id=project_id, turn_id=value.id,
-                        session=session, directory=directory, config=config, messages=context,
-                        selected_skills=value.skills, thinking=value.thinking, model_selections=model_selections,
-                        runtime_model=value.runtimeModel, skills=available, conversation_id=UUID(saved['conversationId']))
-                    async with aclosing(runtimes.stream(run)) as stream:
-                        async for event in stream:
-                            if event['type'] == 'delta':
-                                text += event['text']
-                                inherited = ([source for source in referenced_sources(text, previous_sources)
-                                              if source['id'] not in sources]
-                                             if previous_sources and '\ue201' in event['text'] else [])
-                                if inherited:
-                                    sources.update({source['id']: source for source in inherited})
-                                    events.put({'type': 'sources', 'sources': inherited})
-                            if event['type'] == 'sources':
-                                for source in event['sources']:
-                                    sources.setdefault(source['id'], source)
-                            if event['type'] == 'plan':
-                                plan = event['entries']
-                            if event['type'] == 'tool':
-                                previous = next((item for item in activities if item['id'] == event['id']), None)
-                                activity = {**{key: item for key, item in event.items() if key != 'type'},
-                                            'textOffset': previous['textOffset'] if previous else len(text)}
-                                if previous is None:
-                                    activities.append(activity)
-                                else:
-                                    activities[activities.index(previous)] = activity
-                                event = {'type': 'tool', **activity}
-                            events.put(event)
-                except asyncio.CancelledError:
-                    status = 'stopped'
-                    raise
-                except Exception as failure:
-                    # Persist partial output even when an integration fails unexpectedly.
-                    status = 'interrupted'
-                    if isinstance(failure, ProjectError):
-                        error = localized_error_for_language(
-                            accept_language, chinese=str(failure),
-                            status=failure.status, code=failure.code)
-                    else:
-                        error = localized_error_for_language(
-                            accept_language,
-                            chinese='Agent 执行失败，请检查后端日志。',
-                            status=500, code='operation_rejected')
-                    logger.exception(f'agent.turn.failed project_id={project_id} turn_id={value.id}')
-                finally:
-                    if accepted:
-                        for activity in activities:
-                            if activity['status'] == 'running':
-                                activity['status'] = 'interrupted'
-                        saved = await asyncio.to_thread(conversations.update, project_id, finish={
-                            'id': str(uuid5(value.id, 'assistant')), 'role': 'assistant', 'text': text, 'status': status,
-                            'model': model, 'modelIsCliDefault': model_is_cli_default,
-                            'runtime': value.runtime, 'thinking': value.thinking, 'tools': activities,
-                            'sources': list(sources.values()),
-                            **({'plan': plan} if plan is not None else {})}, conversation_id=value.conversationId)
-                    else:
-                        saved = None
-                    events.put({'type': 'end', 'conversation': saved, 'error': error})
-
-            if project_id in active:
-                raise ProjectError('当前工程已有回复正在执行。', 409)
-            task = asyncio.create_task(produce())
-            active[project_id] = (value.id, task, events)
-            def release(completed: asyncio.Task) -> None:
-                running = active.get(project_id)
-                if running and running[0] == value.id and running[1] is completed:
-                    active.pop(project_id)
-            task.add_done_callback(release)
-            # Closing this stream (switching projects, reloading) only detaches
-            # the viewer; the run continues and can be attached again.
-            return StreamingResponse(events.follow(), media_type='text/event-stream')
-
-    return router
