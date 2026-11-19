@@ -143,7 +143,9 @@ async function start() {
       projectSubscription = new AbortController();
       options.signal = AbortSignal.any([options.signal, projectSubscription.signal]);
     }
-    const response = await net.fetch(url, options);
+    // Electron net.fetch buffers request streams internally. The private Host
+    // upload uses Node fetch to send the body incrementally over loopback.
+    const response = await (options.duplex ? fetch(url, options) : net.fetch(url, options));
     if (response.status >= 400) log.write(`Host request ${options.method} ${new URL(url).pathname}: ${response.status}\n`);
     return response;
   }));

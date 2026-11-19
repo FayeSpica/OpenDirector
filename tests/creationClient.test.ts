@@ -1492,3 +1492,34 @@ test("a no-op save skips command batches and unchanged view writes", async () =>
     globalThis.fetch = original;
   }
 });
+
+test("cancelling a staged Blob upload deletes the handle before registering an asset", async () => {
+  const snapshot = empty();
+  const client = new CreationClient(snapshot.project.id);
+  client.install(snapshot);
+  const signal = new AbortController();
+  const handle = crypto.randomUUID();
+  const path = `/api/creation/projects/${snapshot.project.id}/uploads/${handle}`;
+  const calls: [string, string][] = [];
+  const fetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    const method = options?.method ?? "GET";
+    calls.push([String(url), method]);
+    if (method === "PUT") {
+      assert.equal(options?.signal, signal.signal);
+      signal.abort();
+    } else {
+      assert.equal(options?.signal?.aborted ?? false, false);
+    }
+    return Response.json({});
+  };
+  try {
+    await assert.rejects(
+      client.importBlob(new Blob(["image"]), "image.png", "image", handle, undefined, signal.signal),
+      { name: "AbortError" },
+    );
+    assert.deepEqual(calls, [[path, "PUT"], [path, "DELETE"]]);
+  } finally {
+    globalThis.fetch = fetch;
+  }
+});

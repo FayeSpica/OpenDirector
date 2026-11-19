@@ -108,14 +108,23 @@ export async function proxyRequest(request, host, fetcher) {
   const headers = new Headers(request.headers);
   for (const name of ['host', 'origin', 'cookie', 'authorization', 'connection', 'content-length', 'x-opendirector-desktop']) headers.delete(name);
   headers.set('X-OpenDirector-Desktop', host.token);
-  const response = await fetcher(target.href, {
+  const upload = request.method === 'PUT' && /^\/api\/creation\/projects\/[^/]+\/uploads\/[^/]+$/.test(incoming.pathname);
+  const options = {
     method: request.method, headers, redirect: 'manual', credentials: 'omit', signal: request.signal,
-    ...(request.method === 'GET' || request.method === 'HEAD' ? {} : { body: await request.arrayBuffer() }),
-  });
+  };
+  if (request.body) {
+    if (upload) {
+      options.body = request.body;
+      options.duplex = 'half';
+    } else {
+      options.body = await request.arrayBuffer();
+    }
+  }
+  const response = await fetcher(target.href, options);
   if (response.status >= 300 && response.status < 400 && response.status !== 304) return new Response(null, { status: 502 });
   const outgoing = new Headers(response.headers);
   for (const name of ['connection', 'transfer-encoding', 'keep-alive', 'set-cookie', 'content-encoding', 'content-length']) outgoing.delete(name);
   outgoing.set('Cache-Control', 'no-store');
-  outgoing.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-src 'none'");
+  outgoing.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-src 'none'");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers: outgoing });
 }

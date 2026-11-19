@@ -18,7 +18,7 @@ node apps/desktop/scripts/smoke.mjs /absolute/path/to/packaged/OpenDirector
 
 The runtime preparation builds the Python wheel using the existing build backend, including Web assets, skills and the actual OpenCode executable. It installs the wheel and dependencies into a private standalone Python distribution, validates CLI help and both media binaries, and records the target in `runtime/manifest.json`. It never modifies system Python. Supply media binaries with their redistribution licenses for the target; system package-manager binaries with external shared-library dependencies are not portable.
 
-The smoke check launches the actual packaged executable with isolated temporary data, opens the canvas, checks authenticated health and project queries, verifies renderer isolation and both locales, hides the window without stopping the Host, and reopens the same project after quitting. It makes no provider calls. It does not establish Agent-assisted creation, export quality, signing, or support on an untested platform.
+The smoke check launches the actual packaged executable with isolated temporary data, opens the canvas, drops local MP4, PNG, and WAV files and verifies their assets and nodes persist across launches, checks authenticated health and project queries, verifies renderer isolation and both locales, hides the window without stopping the Host, and reopens the same project after quitting. It makes no provider calls. It does not establish Agent-assisted creation, export quality, signing, or support on an untested platform.
 
 ## Terminal command
 

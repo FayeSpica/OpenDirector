@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron';
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -21,6 +22,28 @@ export async function smokeWindow({ window, host, getLocale }) {
   await delay(300);
   if (await window.webContents.executeJavaScript('!!document.querySelector("dialog[open]")')) throw new Error('A dialog obscures the canvas');
   if (process.platform === 'win32') await checkWindowsCaption(window);
+  if (process.env.OPENDIRECTOR_DESKTOP_DATA) {
+    const projectId = result.projectIds.length === 1
+      ? result.projectIds[0]
+      : process.env.OPENDIRECTOR_DESKTOP_SMOKE_MEDIA_PROJECT;
+    if (result.projectIds.length === 1) await dropMedia(window);
+    const fingerprints = Object.fromEntries(
+      Object.entries({ image: 'png', video: 'mp4', audio: 'wav' }).map(([kind, extension]) => {
+        const bytes = readFileSync(join(process.env.OPENDIRECTOR_DESKTOP_DATA, `desktop-drop.${extension}`));
+        return [kind, 'sha256:' + createHash('sha256').update(bytes).digest('hex')];
+      }),
+    );
+    let state;
+    try {
+      await waitFor(async () => {
+        state = await droppedMediaState(window, projectId, fingerprints);
+        return state.saved;
+      }, 'Dropped video, image and audio were not saved');
+    } catch (error) {
+      throw new Error(`${error.message}: ${JSON.stringify(state)}`, { cause: error });
+    }
+    result.mediaDrop = projectId;
+  }
   if (result.projectIds.length === 1) await smokeTraceWindows(window, result.projectIds[0]);
   result.sidebarInitiallyOpen = await window.webContents.executeJavaScript("document.querySelector('.cw-workspace').dataset.desktopSidebar === 'open'");
   if (!result.sidebarInitiallyOpen) {
@@ -217,6 +240,42 @@ export async function smokeWindow({ window, host, getLocale }) {
   window.close();
   if (window.isVisible() || !(await host.inspect())) throw new Error('Closing a window stopped the Host');
   return result;
+}
+
+async function dropMedia(window) {
+  const { webContents } = window;
+  const { x, y } = await webContents.executeJavaScript(`(() => {
+    const bounds = document.querySelector('.react-flow').getBoundingClientRect();
+    return { x: Math.round(bounds.left + bounds.width / 2), y: Math.round(bounds.top + bounds.height / 2) };
+  })()`);
+  const files = ['mp4', 'wav', 'png'].map(extension =>
+    join(process.env.OPENDIRECTOR_DESKTOP_DATA, `desktop-drop.${extension}`));
+  const data = { items: [], files, dragOperationsMask: 1 };
+  const debuggerSession = webContents.debugger;
+  debuggerSession.attach();
+  try {
+    for (const type of ['dragEnter', 'dragOver', 'drop']) {
+      await debuggerSession.sendCommand('Input.dispatchDragEvent', { type, x, y, data });
+    }
+  } finally {
+    debuggerSession.detach();
+  }
+}
+
+async function droppedMediaState(window, projectId, fingerprints) {
+  return window.webContents.executeJavaScript(`(async () => {
+    const response = await fetch('/api/creation/projects/' + ${JSON.stringify(projectId)}, {
+      headers: { 'X-OpenDirector-Request': '1' },
+    });
+    if (!response.ok) return { status: response.status };
+    const { canvasItems, assets } = await response.json();
+    const saved = Object.entries(${JSON.stringify(fingerprints)}).every(([kind, fingerprint]) =>
+      canvasItems.some(item => item.kind === kind && item.binding.role === 'material' &&
+        assets.some(asset => asset.id === item.binding.objectRef.assetId && asset.kind === kind &&
+          asset.provenance.source === 'upload' && asset.fingerprint === fingerprint)));
+    return { saved, nodes: canvasItems.map(item => item.kind), assets: assets.map(asset => asset.name),
+      notice: document.querySelector('.cw-toast [role="status"]')?.textContent };
+  })()`);
 }
 
 async function checkWindowsCaption(window) {

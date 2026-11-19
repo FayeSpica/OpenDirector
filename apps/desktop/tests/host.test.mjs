@@ -81,3 +81,38 @@ test('Concurrent command installs preserve the winning launcher', async () => {
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('Proxy can forward the first upload chunk before the producer finishes', async () => {
+  let producer;
+  const body = new ReadableStream({ start(controller) { producer = controller; } });
+  const cancellation = new AbortController();
+  const request = new Request('opendirector://app/api/creation/projects/project/uploads/handle', {
+    method: 'PUT', body, duplex: 'half', signal: cancellation.signal,
+    headers: { 'x-asset-name': 'video.mp4' },
+  });
+  producer.enqueue(Uint8Array.of(1, 2, 3));
+
+  let firstChunk;
+  const forwarded = proxyRequest(request, { url: 'http://127.0.0.1:12345', token: 'private' },
+    async (_url, options) => {
+      assert.equal(options.method, 'PUT');
+      assert.equal(options.duplex, 'half');
+      assert.equal(options.headers.get('x-asset-name'), 'video.mp4');
+      const reader = options.body.getReader();
+      firstChunk = await reader.read();
+      assert.equal(options.signal.aborted, false);
+      await new Promise(resolve => options.signal.addEventListener('abort', resolve, { once: true }));
+      await reader.cancel();
+      return new Response(null, { status: 204 });
+    });
+
+  try {
+    // Allow both the proxy and stream reader to advance without closing the source.
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(firstChunk, { value: Uint8Array.of(1, 2, 3), done: false });
+  } finally {
+    producer.close();
+    cancellation.abort();
+    await forwarded;
+  }
+});
