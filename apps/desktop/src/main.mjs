@@ -149,7 +149,7 @@ async function start() {
     const assetMedia = options.method === 'GET' &&
       /^\/api\/creation\/projects\/[^/]+\/assets\/[^/]+\/content$/.test(pathname);
     const response = await (options.duplex || assetMedia ? fetch(url, options) : net.fetch(url, options));
-    if (response.status >= 400) log.write(`Host request ${options.method} ${new URL(url).pathname}: ${response.status}\n`);
+    if (response.status >= 400) log.write(`Host request failed: HTTP ${response.status}\n`);
     return response;
   }));
   ownedSession.on('will-download', (_event, item) => item.setSaveDialogOptions({ title: text().save }));
@@ -213,7 +213,16 @@ async function start() {
       if (!(await host.stop())) throw new Error('Host exited without confirming session cleanup');
       log.write(`smoke ${JSON.stringify(result)}\n`);
       app.exit(0);
-    } catch (error) { log.write(`smoke failed ${error.stack ?? error.message}\n`); quitting = true; window?.destroy(); await host.stop(); app.exit(1); }
+    } catch (error) {
+      log.write('Desktop smoke test failed\n');
+      // CI receives assertion details on stderr. The persistent log contains
+      // only a fixed message because errors can include Host response data.
+      console.error(error);
+      quitting = true;
+      window?.destroy();
+      await host.stop();
+      app.exit(1);
+    }
   }
 }
 
