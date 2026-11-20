@@ -148,9 +148,7 @@ async function start() {
     // Asset reads use it too so large response bodies reach the renderer.
     const assetMedia = options.method === 'GET' &&
       /^\/api\/creation\/projects\/[^/]+\/assets\/[^/]+\/content$/.test(pathname);
-    const response = await (options.duplex || assetMedia ? fetch(url, options) : net.fetch(url, options));
-    if (response.status >= 400) log.write(`Host request failed: HTTP ${response.status}\n`);
-    return response;
+    return options.duplex || assetMedia ? fetch(url, options) : net.fetch(url, options);
   }));
   ownedSession.on('will-download', (_event, item) => item.setSaveDialogOptions({ title: text().save }));
   window = new BrowserWindow({ width: 1440, height: 960, minWidth: 800, minHeight: 600, show: false, title: 'OpenDirector',
