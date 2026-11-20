@@ -565,6 +565,12 @@
       "note": "Canvas timeline output button and shortcut publish real MP4 results in both locales without opening the editor."
     },
     {
+      "file": "large_video_import.mjs",
+      "lanes": ["gate"],
+      "previewSafe": false,
+      "note": "Large MP4 file input, original asset bytes and stable canvas binding after reload."
+    },
+    {
       "file": "example_canvas_picker.mjs",
       "lanes": [
         "gate"

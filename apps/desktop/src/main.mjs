@@ -145,7 +145,10 @@ async function start() {
     }
     // Electron net.fetch buffers request streams internally. The private Host
     // upload uses Node fetch to send the body incrementally over loopback.
-    const response = await (options.duplex ? fetch(url, options) : net.fetch(url, options));
+    // Asset reads use it too so large response bodies reach the renderer.
+    const assetMedia = options.method === 'GET' &&
+      /^\/api\/creation\/projects\/[^/]+\/assets\/[^/]+\/content$/.test(pathname);
+    const response = await (options.duplex || assetMedia ? fetch(url, options) : net.fetch(url, options));
     if (response.status >= 400) log.write(`Host request ${options.method} ${new URL(url).pathname}: ${response.status}\n`);
     return response;
   }));
@@ -193,7 +196,10 @@ async function start() {
     return { action: 'deny' };
   });
   window.webContents.on('will-navigate', (event, url) => { if (!ownedURL(url)) event.preventDefault(); });
-  window.webContents.on('render-process-gone', () => { exporting = false; });
+  window.webContents.on('render-process-gone', (_event, { reason, exitCode }) => {
+    exporting = false;
+    log.write(`Renderer exited: reason=${reason} exitCode=${exitCode}\n`);
+  });
   window.on('close', event => { if (!quitting) { event.preventDefault(); window.hide(); } });
   app.on('activate', () => { window?.show(); window?.focus(); });
   await window.loadURL('opendirector://app/');

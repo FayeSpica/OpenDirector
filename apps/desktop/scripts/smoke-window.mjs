@@ -1,3 +1,4 @@
+import { guardLargeVideoDataUrl, largeVideoState, verifyLargeVideoBytes } from './large-video.mjs';
 import { app, BrowserWindow } from 'electron';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -43,6 +44,8 @@ export async function smokeWindow({ window, host, getLocale }) {
       throw new Error(`${error.message}: ${JSON.stringify(state)}`, { cause: error });
     }
     result.mediaDrop = projectId;
+    const fixture = process.env.OPENDIRECTOR_DESKTOP_SMOKE_LARGE_VIDEO;
+    if (fixture) result.largeVideo = await smokeLargeVideo(window, host, projectId, JSON.parse(fixture), result.projectIds.length === 1);
   }
   if (result.projectIds.length === 1) await smokeTraceWindows(window, result.projectIds[0]);
   result.sidebarInitiallyOpen = await window.webContents.executeJavaScript("document.querySelector('.cw-workspace').dataset.desktopSidebar === 'open'");
@@ -247,6 +250,38 @@ export async function smokeWindow({ window, host, getLocale }) {
   window.close();
   if (window.isVisible() || !(await host.inspect())) throw new Error('Closing a window stopped the Host');
   return result;
+}
+
+async function smokeLargeVideo(window, host, projectId, fixture, firstLaunch) {
+  const { webContents } = window;
+  const name = 'large-video.mp4';
+  if (firstLaunch) {
+    await webContents.executeJavaScript(`(${guardLargeVideoDataUrl})(${JSON.stringify(name)})`);
+    const cdp = webContents.debugger;
+    cdp.attach();
+    try {
+      const { root } = await cdp.sendCommand('DOM.getDocument');
+      const { nodeId } = await cdp.sendCommand('DOM.querySelector', {
+        nodeId: root.nodeId,
+        selector: 'input[type=file][aria-label="Choose local asset files"], input[type=file][aria-label="选择本地素材文件"]',
+      });
+      if (!nodeId) throw new Error('Canvas local file input is absent');
+      await cdp.sendCommand('DOM.setFileInputFiles', {
+        nodeId, files: [join(process.env.OPENDIRECTOR_DESKTOP_DATA, name)],
+      });
+    } finally {
+      cdp.detach();
+    }
+  }
+  const binding = await waitFor(() => webContents.executeJavaScript(
+    `(${largeVideoState})(${JSON.stringify(projectId)}, ${JSON.stringify(fixture)})`,
+  ), 'Large video did not bind to a saved canvas node', 300);
+  if (binding.blocked) throw new Error('Large video import attempted FileReader.readAsDataURL');
+  const response = await fetch(`${host.url}/api/creation/projects/${projectId}/assets/${binding.assetId}/content`, {
+    headers: { 'X-OpenDirector-Request': '1', 'X-OpenDirector-Desktop': host.token },
+  });
+  await verifyLargeVideoBytes(response, fixture);
+  return binding;
 }
 
 async function dropMedia(window) {

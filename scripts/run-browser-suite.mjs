@@ -13,6 +13,7 @@
 import { spawnSync } from "node:child_process";
 
 const workflows = [
+  { name: "large video import", script: "tests/browser/large_video_import.mjs" },
   { name: "timeline node output", script: "tests/browser/timeline_node_output.mjs" },
   {
     name: "example canvas picker",

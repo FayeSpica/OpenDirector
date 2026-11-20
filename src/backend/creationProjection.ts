@@ -100,12 +100,14 @@ export class CreationProjection {
   }
 
   async importFile(file: File, signal?: AbortSignal): Promise<CanvasResource> {
-    const { mimeType } = classifyImportFile(file);
-    if (mimeType !== "image/heic" && mimeType !== "image/heif")
+    const { kind, mimeType } = classifyImportFile(file);
+    if (kind !== "video" && kind !== "audio" &&
+        mimeType !== "image/heic" && mimeType !== "image/heif")
       return readEditorResource(file, signal);
     signal?.throwIfAborted();
-    const ref = await this.client.importBlob(file, file.name, "image");
+    const ref = await this.client.importBlob(file, file.name, kind, undefined, undefined, signal);
     signal?.throwIfAborted();
+    // The Host probes original bytes, so audio and video never need a data URL.
     // Failed previews must not be saved as empty generation nodes.
     await this.client.mediaUrl(ref.assetId, { signal });
     return this.resource(ref);

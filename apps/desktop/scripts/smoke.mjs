@@ -2,6 +2,7 @@ import { copyFile, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createLargeVideo } from './large-video.mjs';
 import { spawn } from 'node:child_process';
 
 const binary = process.argv[2];
@@ -11,7 +12,11 @@ let logOffset = 0;
 let previous;
 let mediaProject;
 let sidebarOpen = false;
+let largeVideo;
 try {
+ const video = process.platform === 'win32'
+  ? await createLargeVideo(join(directory, 'large-video.mp4'))
+  : null;
  const fixtures = [
   ['desktop-drop.mp4', '../../../tests/fixtures/timeline-text/visual-a.mp4'],
   ['desktop-drop.wav', '../../../tests/fixtures/timeline-text/audio-a.wav'],
@@ -25,6 +30,7 @@ try {
     env: {
       ...process.env,
       OPENDIRECTOR_DESKTOP_DATA: directory,
+      OPENDIRECTOR_DESKTOP_SMOKE_LARGE_VIDEO: video ? JSON.stringify(video) : '',
       OPENDIRECTOR_DESKTOP_SMOKE_MEDIA_PROJECT: mediaProject ?? '',
       OPENDIRECTOR_DESKTOP_SMOKE_DELETE: attempt === 2 ? '1' : '',
       OPENDIRECTOR_DESKTOP_SMOKE_SIDEBAR: attempt === 0 ? 'open' : 'closed',
@@ -43,6 +49,11 @@ try {
   const receipt = JSON.parse(latest.slice(6));
   if (!receipt.mediaDrop || (mediaProject && receipt.mediaDrop !== mediaProject)) throw new Error('Desktop media drop was not verified');
   mediaProject = receipt.mediaDrop;
+  if (video) {
+    if (!receipt.largeVideo || (largeVideo && JSON.stringify(largeVideo) !== JSON.stringify(receipt.largeVideo)))
+      throw new Error('Large video node or asset identity changed across launches');
+    largeVideo = receipt.largeVideo;
+  }
   if (receipt.sidebarInitiallyOpen !== sidebarOpen) throw new Error('Sidebar default or restored state is incorrect');
   sidebarOpen = receipt.sidebarFinallyOpen;
   const current = receipt.projectIds;

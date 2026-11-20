@@ -29,6 +29,7 @@
     "files": [
       "src/**",
       "scripts/smoke-window.mjs",
+      "scripts/large-video.mjs",
       "package.json"
     ],
     "extraResources": [

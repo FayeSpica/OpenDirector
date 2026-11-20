@@ -110,7 +110,7 @@ export async function proxyRequest(request, host, fetcher) {
   headers.set('X-OpenDirector-Desktop', host.token);
   const upload = request.method === 'PUT' && /^\/api\/creation\/projects\/[^/]+\/uploads\/[^/]+$/.test(incoming.pathname);
   const options = {
-    method: request.method, headers, redirect: 'manual', credentials: 'omit', signal: request.signal,
+    method: request.method, headers, redirect: 'manual', credentials: 'omit', cache: 'no-store', signal: request.signal,
   };
   if (request.body) {
     if (upload) {
