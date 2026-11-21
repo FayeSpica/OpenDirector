@@ -1,6 +1,11 @@
 {
   "scripts": [
     {
+      "file": "agent_image_ordinary.mjs",
+      "lanes": ["manual"],
+      "note": "Requires an isolated API with live chat and image model connections."
+    },
+    {
       "file": "fasth3_capability_flow.mjs",
       "helper": true
     },

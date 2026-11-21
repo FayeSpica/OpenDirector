@@ -21,6 +21,7 @@ This directory is the entry point for the repository's shared documentation. The
 | [Public website](../website/README.md) | Local preview, installer links, and GitHub Pages deployment | Website deployment or installer publishing changes |
 | [Release tags and daily cuts](development/release.md) | Public SemVer tags and the daily patch cut | The tag scheme, daily cut gate, or version-field set changes |
 | [UI performance design](development/ui-performance.md) | Interaction design principles, latency budgets, and measurement | A UI performance principle, target, or measurement method changes |
+| [Agent image latency benchmark](development/agent-image-ordinary-benchmark.md) | Live browser workload and metrics for single-image requests | The workload, timing boundaries, or result checks change |
 | [macOS installation validation](development/macos-install-validation.md) | Installation and usage scenarios verified on Apple Silicon | The corresponding acceptance checks are repeated |
 | [Bilingual interface](development/i18n.md) | Language selection, message organization, and checks | Language policy, message structure, or checks change |
 | [Python installation and packaging](development/packaging.md) | Installation, platform wheel builds, and isolated verification | Packaging, resource paths, or build process changes |

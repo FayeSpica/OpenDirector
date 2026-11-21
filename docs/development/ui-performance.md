@@ -21,6 +21,10 @@ Use these default budgets for routine UI actions such as opening a panel, naviga
 
 Start both timers at the user action. Define the visible feedback and the usable result for each workflow, and calculate P90 using the nearest-rank method. For long-running operations such as generation or export, apply the feedback budget to acknowledging the action and measure completion separately against a workload-specific target.
 
+When the user clicks Send in AI chat with an explicit request to generate one image, the image node created for that request must become visible on the canvas within **3 seconds of the click**. Measure separately from the same click until the generated image is visible in the node.
+
+用户在 AI 对话中点击发送明确的单图生成请求后，本次请求创建的图片节点必须在 **3 秒内**在画布上可见。成图耗时单独测量，从同一次点击到生成的图片在节点内可见。
+
 ## Measurement
 
 Use browser measurements for user-facing latency. Record first feedback and readiness separately, and split slow paths into client work, request queueing, server time, and rendering. Use comparable builds, fixtures, and interaction sequences. Keep initial load, warm navigation, direct manipulation, and long-running operations separate when setting budgets and reporting results.
