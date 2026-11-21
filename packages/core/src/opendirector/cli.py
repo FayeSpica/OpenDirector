@@ -1,6 +1,7 @@
 """Command-line access to OpenDirector's shared project services."""
 from contextlib import redirect_stdout
 from enum import Enum
+from functools import partial
 from hashlib import sha256
 import inspect
 import json
@@ -19,6 +20,7 @@ import httpx
 from pydantic import ValidationError
 import typer
 from typer._click.exceptions import UsageError
+from typer.core import TyperCommand
 
 from opendirector.agent.tools import COMMANDS, command_help
 from opendirector.domain.creation.commands import COMMAND_MODELS, command_fingerprint, parse_command
@@ -333,9 +335,17 @@ def emit(value):
 
 
 @group("project").command("show", help="Read the current authoritative project snapshot.")
-def project_show(ctx: typer.Context):
-    ctx.obj.command = ctx.command_path
-    emit(ctx.obj.snapshot())
+def project_show(ctx: typer.Context,
+                 with_models: Annotated[bool, typer.Option(help="Include the model catalogue and available CLI operations.")] = False):
+    client = ctx.obj
+    client.command = ctx.command_path
+    if not with_models:
+        emit(client.snapshot())
+    elif client.live:
+        context = client.call("read_project", {})
+        emit({key: context[key] for key in ("project", "models", "commands", "modelSelections")})
+    else:
+        emit({"project": client.snapshot(), "models": client.models(), "commands": list(COMMANDS)})
 
 
 @group("project").command("list", help="List available projects.")
@@ -720,9 +730,22 @@ def read_file(path):
     return value
 
 
+class CommandWithExample(TyperCommand):
+    def __init__(self, *, command_model, **kwargs):
+        super().__init__(**kwargs)
+        self.command_model = command_model
+
+    def format_help(self, ctx, formatter):
+        if self.epilog is None:
+            example = command_help(self.command_model.model_json_schema(), "", UUID(int=0))["example"]
+            self.epilog = ("Example command document for --file:\n" +
+                           json.dumps(example, ensure_ascii=False, indent=2) +
+                           "\nUse --help-field payload to inspect structured fields and branches.")
+        return super().format_help(ctx, formatter)
+
+
 def register_command(kind, model):
     namespace, action = kind.split(".", 1)
-    payload_schema = model.model_json_schema()
     payload = model.model_fields["payload"].annotation
     properties = payload.model_json_schema().get("properties", {})
     parameters = [
@@ -746,7 +769,7 @@ def register_command(kind, model):
     def execute(ctx, file=None, expected_version=None, help_field=None, **values):
         ctx.obj.command = ctx.command_path
         if help_field is not None:
-            emit(command_help(payload_schema, help_field, ctx.obj.project or UUID(int=0)))
+            emit(command_help(model.model_json_schema(), help_field, ctx.obj.project or UUID(int=0)))
             return
         body = read_file(file) if file else {"payload": {}}
         if body.get("type", kind) != kind:
@@ -781,13 +804,11 @@ def register_command(kind, model):
             versions.append({"objectType": object_type, "id": str(UUID(identity)), "revision": int(revision)})
         emit(ctx.obj.execute(kind, arguments, versions, body.get("expectedPreview")))
     execute.__signature__ = inspect.Signature(parameters)
-    help = command_help(payload_schema, "", UUID(int=0)) if kind in COMMANDS else None
     description = model.__doc__
     if kind == "generation.submit":
         description += " Accepted receipts return job wait commands; use them to wait for completion."
     group(kebab(namespace)).command(kebab(action), help=description,
-        epilog=("Example command document for --file:\n" + json.dumps(help["example"], ensure_ascii=False, indent=2) +
-                "\nUse --help-field payload to inspect structured fields and branches.") if help else None)(execute)
+        cls=partial(CommandWithExample, command_model=model) if kind in COMMANDS else None)(execute)
 
 
 for command_type, command_model in COMMAND_MODELS.items():

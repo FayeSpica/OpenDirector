@@ -51,6 +51,6 @@ def test_reasoning_trace_handles_fragmented_sse_without_changing_response(tmp_pa
             assert all(record["choiceIndex"] == 0 for record in reasoning)
         finally:
             server.close()
+            await gateway.aclose()
             await server.wait_closed()
-            await asyncio.gather(*gateway.active)
     asyncio.run(run())

@@ -255,7 +255,7 @@ class NativeRuntime:
                     'Use inherited PATH to discover installed programs with Get-Command in PowerShell or command -v in POSIX shells. '
                     'Read source assets at their supplied absolute paths; do not move or modify them. '
                     'Write all intermediate files and outputs into the execution directory. '
-                    'Use opendirector --help to discover OpenDirector commands and opendirector <group> <command> --help for usage. Use opendirector for project changes.')
+                    'Use opendirector for project changes. Consult command help when the command or its arguments are unfamiliar.')
                 prompt = execution_context + '\n' + json.dumps(context[-1:] if session_id else context, ensure_ascii=False)
                 skill_instruction = ''
                 if selected:
@@ -357,12 +357,11 @@ class NativeRuntime:
                         server.close()
                         await server.wait_closed()
                     if model_server:
-                        model.closed = True
                         model_server.close()
-                        await model_server.wait_closed()
-                        for task in model.active:
-                            task.cancel()
-                        await asyncio.gather(*model.active, return_exceptions=True)
+                        try:
+                            await model.aclose()
+                        finally:
+                            await model_server.wait_closed()
                     if runtime == 'deepseek' and pump and not pump.done():
                         while not queue.empty():
                             queue.get_nowait()

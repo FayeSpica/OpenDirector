@@ -16,12 +16,17 @@ opendirector canvas create-generation --help
 ```bash
 opendirector project list
 opendirector --project PROJECT_UUID project show
+opendirector --project PROJECT_UUID project show --with-models
 opendirector model list --kind video --search H3-Lite
 opendirector model show MiniMax-H3-Lite
 opendirector --project PROJECT_UUID asset import ./after.png --kind image
 opendirector --project PROJECT_UUID canvas add-material --asset ASSET_UUID --x 0 --y 0
 opendirector --project PROJECT_UUID video create   --model MODEL_CONFIG_UUID   --prompt "人物缓缓转头"   --duration 5   --first-frame SOURCE_CANVAS_ITEM_UUID
 ```
+
+`project show --with-models` 同时返回工程快照、模型目录和可用业务命令。在 Agent 的执行环境中，这些数据及本轮模型选择通过一次业务网关读取返回。
+
+`project show --with-models` returns the project snapshot, model catalogue, and available business commands. In an Agent execution environment, one gateway read also includes the turn's model selections.
 
 `canvas add-material` 和 `video create` 通过必填的 `--x`、`--y` 明确创建位置。Agent 先读取画布对象的位置、尺寸及分组，再安排新元素布局。`video create` 创建可编辑的生成节点与参考关系，返回 `specId` 和 `itemId`。所有画布修改命令以及批量事务通过共用返回层提供 `canvasItems`，包含元素身份、版本、位置、尺寸、父级、坐标系及可见性。位置未变化的操作也返回目标元素的几何信息，供后续布局判断。几何信息读取失败时，回执保留已提交状态并返回 `geometryReadError`。模型可通过配置 UUID 或唯一匹配的完整模型名指定。重名配置返回候选 UUID 和端点，由调用者明确选择。模型的输入模式必须支持所选参数。`--reference-item` 支持重复指定参考节点。提交生成时使用创建回执中的对象版本，后台任务由服务端继续执行。
 

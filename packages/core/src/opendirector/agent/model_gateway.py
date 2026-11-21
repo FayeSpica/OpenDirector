@@ -1,6 +1,7 @@
 import asyncio
 import codecs
 from contextlib import suppress
+from http.cookiejar import CookieJar, DefaultCookiePolicy
 import json
 import logging
 import os
@@ -32,7 +33,19 @@ class ModelGateway:
         self.project_id, self.turn_id, self.transport = project_id, turn_id, transport
         self.trace_path = trace_path
         self.active: set[asyncio.Task] = set()
+        self.client: httpx.AsyncClient | None = None
         self.closed = False
+
+    async def aclose(self) -> None:
+        self.closed = True
+        tasks = tuple(self.active)
+        for task in tasks:
+            task.cancel()
+        try:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        finally:
+            if self.client is not None:
+                await self.client.aclose()
 
     def trace(self, event: str, request_id: str, **details: object) -> None:
         if self.trace_path is None:
@@ -71,6 +84,9 @@ class ModelGateway:
     def connect(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
+        if self.closed:
+            writer.close()
+            return
         task = asyncio.create_task(self.request(reader, writer))
         self.active.add(task)
         task.add_done_callback(self.active.discard)
@@ -120,54 +136,58 @@ class ModelGateway:
                 url = self.config["url"].rstrip("/") + "/chat/completions"
                 request_id = secrets.token_hex(8)
                 self.trace("model.request", request_id, payload=payload)
-                async with httpx.AsyncClient(
-                    transport=self.transport,
-                    event_hooks=MODEL_HTTP_HOOKS,
-                    trust_env=trust_environment(url, config=self.config),
-                    timeout=httpx.Timeout(120, connect=15),
-                ) as client:
-                    async with client.stream(
-                        "POST",
-                        url,
-                        headers=auth_headers(self.config),
-                        json=payload,
-                    ) as response:
-                        self.trace(
-                            "model.response", request_id,
-                            status=response.status_code,
-                            elapsedMs=round((monotonic() - started) * 1000),
-                        )
-                        content_type = response.headers.get(
-                            "content-type", "application/json"
-                        )
-                        writer.write(
-                            f"HTTP/1.1 {response.status_code} Response\r\nContent-Type: {content_type}\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n".encode()
-                        )
-                        status_sent = True
+                if self.client is None:
+                    self.client = httpx.AsyncClient(
+                        transport=self.transport,
+                        event_hooks=MODEL_HTTP_HOOKS,
+                        trust_env=trust_environment(url, config=self.config),
+                        timeout=httpx.Timeout(120, connect=15),
+                        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=30),
+                        # A provider cookie must not become context for a later request.
+                        cookies=CookieJar(policy=DefaultCookiePolicy(allowed_domains=())),
+                    )
+                async with self.client.stream(
+                    "POST",
+                    url,
+                    headers=auth_headers(self.config),
+                    json=payload,
+                ) as response:
+                    self.trace(
+                        "model.response", request_id,
+                        status=response.status_code,
+                        elapsedMs=round((monotonic() - started) * 1000),
+                    )
+                    content_type = response.headers.get(
+                        "content-type", "application/json"
+                    )
+                    writer.write(
+                        f"HTTP/1.1 {response.status_code} Response\r\nContent-Type: {content_type}\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n".encode()
+                    )
+                    status_sent = True
+                    await writer.drain()
+                    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+                    buffer = ""
+                    event_lines = []
+                    async for chunk in response.aiter_bytes():
+                        if not chunk:
+                            continue
+                        # Frame decoded upstream bytes, not the provider's wire chunks.
+                        writer.write(f"{len(chunk):x}\r\n".encode() + chunk + b"\r\n")
                         await writer.drain()
-                        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-                        buffer = ""
-                        event_lines = []
-                        async for chunk in response.aiter_bytes():
-                            if not chunk:
-                                continue
-                            # Frame decoded upstream bytes, not the provider's wire chunks.
-                            writer.write(f"{len(chunk):x}\r\n".encode() + chunk + b"\r\n")
-                            await writer.drain()
-                            forwarded_bytes += len(chunk)
-                            if "text/event-stream" not in content_type:
-                                continue
-                            buffer += decoder.decode(chunk)
-                            while "\n" in buffer:
-                                line, _, buffer = buffer.partition("\n")
-                                line = line.rstrip("\r")
-                                if line.startswith("data:"):
-                                    event_lines.append(line[5:].lstrip(" "))
-                                elif not line and event_lines:
-                                    data = "\n".join(event_lines)
-                                    event_lines.clear()
-                                    if data != "[DONE]":
-                                        self.trace_reasoning(request_id, data)
+                        forwarded_bytes += len(chunk)
+                        if "text/event-stream" not in content_type:
+                            continue
+                        buffer += decoder.decode(chunk)
+                        while "\n" in buffer:
+                            line, _, buffer = buffer.partition("\n")
+                            line = line.rstrip("\r")
+                            if line.startswith("data:"):
+                                event_lines.append(line[5:].lstrip(" "))
+                            elif not line and event_lines:
+                                data = "\n".join(event_lines)
+                                event_lines.clear()
+                                if data != "[DONE]":
+                                    self.trace_reasoning(request_id, data)
                 # Only successful exhaustion and cleanup may terminate this response.
                 # Sending this in finally would disguise a truncated body as complete.
                 writer.write(b"0\r\n\r\n")

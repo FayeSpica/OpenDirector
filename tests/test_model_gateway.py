@@ -28,11 +28,12 @@ class Stream(httpx.AsyncByteStream):
 
 
 @asynccontextmanager
-async def gateway_server(tmp_path, handler, *, broken_cleanup=False):
+async def gateway_server(tmp_path, handler=None, *, broken_cleanup=False, upstream='http://provider.invalid'):
     trace = tmp_path / 'model.jsonl'
     gateway = ModelGateway(
-        {'modelId': 'fixture', 'url': 'http://provider.invalid', 'authMode': 'none'},
-        'auto', 'local-token', 'project', 'turn', httpx.MockTransport(handler), trace_path=trace,
+        {'modelId': 'fixture', 'url': upstream, 'authMode': 'none'},
+        'auto', 'local-token', 'project', 'turn',
+        httpx.MockTransport(handler) if handler is not None else None, trace_path=trace,
     )
     def connect(reader, writer):
         if broken_cleanup:
@@ -47,11 +48,8 @@ async def gateway_server(tmp_path, handler, *, broken_cleanup=False):
         yield gateway, f'http://127.0.0.1:{server.sockets[0].getsockname()[1]}/chat/completions'
     finally:
         server.close()
+        await gateway.aclose()
         await server.wait_closed()
-        tasks = list(gateway.active)
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def records(tmp_path):
@@ -61,6 +59,51 @@ def records(tmp_path):
 def request(client, url):
     return client.stream('POST', url, headers={'Authorization': 'Bearer local-token'},
                          json={'messages': [{'role': 'user', 'content': 'hello'}]})
+
+
+def test_turn_reuses_provider_connection_without_forwarding_cookies(tmp_path):
+    async def run():
+        requests = []
+        connected = []
+        disconnected = asyncio.Event()
+
+        async def respond(reader, writer):
+            connected.append(writer)
+            try:
+                while line := await reader.readline():
+                    assert line == b'POST /chat/completions HTTP/1.1\r\n'
+                    headers = {}
+                    while (line := await reader.readline()) != b'\r\n':
+                        name, value = line.split(b':', 1)
+                        headers[name.lower()] = value.strip()
+                    await reader.readexactly(int(headers[b'content-length']))
+                    requests.append(headers)
+                    writer.write(b'HTTP/1.1 200 OK\r\nContent-Length: 2\r\n'
+                                 b'Set-Cookie: session=provider; Path=/\r\n\r\n{}')
+                    await writer.drain()
+            finally:
+                writer.close()
+                await writer.wait_closed()
+                disconnected.set()
+
+        provider = await asyncio.start_server(respond, '127.0.0.1', 0)
+        try:
+            upstream = f'http://127.0.0.1:{provider.sockets[0].getsockname()[1]}'
+            async with gateway_server(tmp_path, upstream=upstream) as (_, url):
+                async with httpx.AsyncClient(trust_env=False, timeout=3) as client:
+                    for _ in range(2):
+                        async with request(client, url) as response:
+                            assert response.status_code == 200
+                            assert await response.aread() == b'{}'
+                assert len(connected) == 1
+                assert len(requests) == 2
+                assert all(b'cookie' not in headers for headers in requests)
+                assert not disconnected.is_set()
+            await asyncio.wait_for(disconnected.wait(), 3)
+        finally:
+            provider.close()
+            await provider.wait_closed()
+    asyncio.run(run())
 
 
 def test_forwarding_is_incremental_and_terminates_after_upstream(tmp_path):
@@ -118,11 +161,7 @@ def test_cancellation_closes_upstream_without_completing_body(tmp_path, broken_c
                 async with request(client, url) as response:
                     body = response.aiter_bytes()
                     assert await anext(body) == b'partial'
-                    tasks = list(gateway.active)
-                    assert len(tasks) == 1
-                    tasks[0].cancel()
-                    result = await asyncio.gather(*tasks, return_exceptions=True)
-                    assert isinstance(result[0], asyncio.CancelledError)
+                    await gateway.aclose()
                     with pytest.raises(httpx.RemoteProtocolError):
                         await anext(body)
             assert stream.closed

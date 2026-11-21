@@ -1,6 +1,7 @@
 """Assistant admission checks the parameters forwarded by the real model gateway."""
 import asyncio
 import json
+from threading import Event
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -42,10 +43,12 @@ def test_assistant_parameters_at_admission_and_gateway(tmp_path, monkeypatch, lo
 
     probe = CapabilityProbe(transport=httpx.MockTransport(discover), clock=lambda: NOW, wall_clock=lambda: NOW)
     original = ModelAvailability.require
+    admitted = Event()
 
     def require(self, config, request, prepared=None):
         checked.append(dict(request.parameters))
-        return original(self, config, request, prepared)
+        original(self, config, request, prepared)
+        admitted.set()
 
     def respond(request):
         assert request.method == 'POST' and request.url.path == '/v1/chat/completions'
@@ -70,10 +73,12 @@ def test_assistant_parameters_at_admission_and_gateway(tmp_path, monkeypatch, lo
                 yield {'type': 'delta', 'text': response.json()['text']}
         finally:
             server.close()
+            await gateway.aclose()
             await server.wait_closed()
-            await asyncio.gather(*list(gateway.active))
 
     async def skills(*args):
+        if scenario in {'changed', 'narrowed'}:
+            assert await asyncio.to_thread(admitted.wait, 5)
         if scenario == 'changed':
             configs.save('agent', 'http://changed.test/v1', 'demo', '', saved['id'], connection_type='self_hosted')
         elif scenario == 'narrowed':

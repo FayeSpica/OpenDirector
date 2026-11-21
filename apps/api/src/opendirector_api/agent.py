@@ -15,7 +15,6 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from opendirector.agent.catalog import model_choices
 from opendirector.agent.context import RunContext, RuntimeId
-from opendirector.agent.direct_image import DirectImageRequest
 from opendirector.domain.creation.base import agent_command_id
 from opendirector.agent.citations import referenced_sources, with_trace_sources
 from opendirector.agent.runtime import AgentRuntimes, runtime_available, configured_runtimes, runtime_spec, runtime_catalog, runtime_status
@@ -446,30 +445,22 @@ def agent_routes(projects, generation, configs, provider=None, *, active=None) -
                 raise ProjectError(f'{spec.label} 不支持技能，请移除技能后发送。', 409)
             if value.runtime == 'jiuwenswarm' and value.thinking != 'auto':
                 raise ProjectError('JiuwenSwarm 当前使用原生默认推理强度。', 409)
-            model_selections = dict(value.modelSelections)
-            direct = None
             config = await asyncio.to_thread(configs.resolve, str(value.modelId), 'agent') if spec.modelSource == 'settings' else None
-            models = await asyncio.to_thread(configs.list)
-            image_configured = any(row['kind'] == 'image' and row['id'] == model_selections.get('image')
-                                   for row in models)
-            if (config is not None and value.runtime == 'default' and value.thinking == 'auto' and not value.assets and not value.skills
-                    and image_configured
-                    and (not value.content or all(part.get('type') == 'text' and isinstance(part.get('text'), str)
-                                                  for part in value.content)
-                         and ''.join(part['text'] for part in value.content) == value.text)):
-                conversation = await asyncio.to_thread(conversations.list, project_id)
-                active_chat = next(item for item in conversation['items'] if item['id'] == conversation['activeId'])
-                if active_chat['messageCount'] == 0:
-                    direct = DirectImageRequest.parse(value.text, model_selections['image'])
-                    if direct is None:
-                        direct = await DirectImageRequest.classify(value.text, config, project_id=project_id,
-                            turn_id=value.id, provider=provider)
-            if config is not None and direct is None:
-                prepared = await asyncio.to_thread(generation.availability.prepare, config)
-                current = await asyncio.to_thread(configs.resolve, str(value.modelId), 'agent')
-                generation.availability.require(current, _assistant_request(current), prepared)
-                config = current
-            available = await skills(projects.local.repository, directory) if spec.supportsSkills and direct is None else []
+            pending_skills = (asyncio.create_task(skills(projects.local.repository, directory))
+                              if spec.supportsSkills else None)
+            try:
+                # Probe the model alongside skill discovery, while checking model errors first.
+                if config is not None:
+                    prepared = await asyncio.to_thread(generation.availability.prepare, config)
+                    current = await asyncio.to_thread(configs.resolve, str(value.modelId), 'agent')
+                    generation.availability.require(current, _assistant_request(current), prepared)
+                    config = current
+                available = await pending_skills if pending_skills is not None else []
+            finally:
+                if pending_skills is not None:
+                    with CancelScope(shield=True):
+                        pending_skills.cancel()
+                        await asyncio.gather(pending_skills, return_exceptions=True)
             if set(value.skills) - {item['name'] for item in available}:
                 raise ProjectError('技能已失效，请重新选择。', 409)
             snapshot = await asyncio.to_thread(projects.snapshot, project_id)
@@ -479,12 +470,13 @@ def agent_routes(projects, generation, configs, provider=None, *, active=None) -
                     raise ProjectError('引用素材不属于当前工程。', 409)
             model = config['modelId'] if config else value.runtimeModel
             model_is_cli_default = spec.modelSource == 'cli' and not model
-            model_names = {row['id']: row['modelId'] for row in models}
+            model_selections = dict(value.modelSelections)
+            model_names = {row['id']: row['modelId'] for row in configs.list()}
             preferences = {kind: {'modelConfigId': model_id, 'modelName': model_names.get(model_id)}
                 for kind, model_id in model_selections.items() if model_id}
             events = RunEvents()
             def validate_connection():
-                if config is not None and direct is None:
+                if config is not None:
                     current = configs.resolve(str(value.modelId), 'agent')
                     generation.availability.require(current, _assistant_request(current), prepared)
             async def produce() -> None:
@@ -528,8 +520,7 @@ def agent_routes(projects, generation, configs, provider=None, *, active=None) -
                         session=session, directory=directory, config=config, messages=context,
                         selected_skills=value.skills, thinking=value.thinking, model_selections=model_selections,
                         runtime_model=value.runtimeModel, skills=available, conversation_id=UUID(saved['conversationId']))
-                    runtime_events = direct.stream(runtimes.business, run, snapshot.canvasItems) if direct else runtimes.stream(run)
-                    async with aclosing(runtime_events) as stream:
+                    async with aclosing(runtimes.stream(run)) as stream:
                         async for event in stream:
                             if event['type'] == 'delta':
                                 text += event['text']

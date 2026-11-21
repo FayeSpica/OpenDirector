@@ -457,6 +457,19 @@ def test_spec_update_help_explains_replacement_and_json():
     assert 'Replace the complete generation configuration' in ' '.join(plain_help(result.output).split())
 
 
+def test_project_show_with_models_reads_the_agent_context_once(monkeypatch):
+    monkeypatch.setenv('OPENDIRECTOR_AGENT_SOCKET', '/fixture.sock')
+    expected = {'project': {'id': str(uuid4())}, 'models': [], 'commands': ['project.rename'], 'modelSelections': {}}
+    call = Mock(return_value={**expected, 'commandMetadata': {}})
+    monkeypatch.setattr(cli.Client, 'call', call)
+
+    result = CliRunner().invoke(cli.app, ['project', 'show', '--with-models'])
+
+    assert result.exit_code == 0, result.output or str(result.exception)
+    assert json.loads(result.output) == expected
+    call.assert_called_once_with('read_project', {})
+
+
 def test_timeline_default_font_is_offline_and_does_not_open_a_project(monkeypatch, tmp_path):
     from hashlib import sha256
     from opendirector import installation
