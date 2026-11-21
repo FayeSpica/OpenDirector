@@ -13,6 +13,8 @@
 
 # OpenDirector
 
+**[Download OpenDirector](https://thinkflowlab.github.io/OpenDirector/#download)** for Apple Silicon Macs and Windows x64 PCs.
+
 **From an idea to a downloadable short film: generate through chat, organize on a canvas, edit media, and export from a timeline.**
 
 OpenDirector is an AI video creation workspace that runs locally and is accessed through your browser. Discuss ideas with the assistant and generate assets, organize and iterate on them on the canvas, edit images, video, and audio, then arrange your material on a timeline and export an MP4.
