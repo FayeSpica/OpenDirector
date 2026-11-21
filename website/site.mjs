@@ -1,4 +1,5 @@
 import { messages } from "./messages.mjs";
+import "./language.mjs";
 
 const copy = messages[document.documentElement.lang];
 

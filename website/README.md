@@ -12,15 +12,15 @@ bash scripts/build-website.sh "$preview/dist/OpenDirector"
 node_modules/.bin/vite preview "$preview" --host 127.0.0.1 --port 8780 --strictPort
 ```
 
-Open the [English homepage](http://127.0.0.1:8780/OpenDirector/) or the [Chinese homepage](http://127.0.0.1:8780/OpenDirector/zh-cn/). English is the default at `/OpenDirector/`. Both are static HTML pages, and the language links work with JavaScript disabled. Vite supports the byte-range requests the player uses to jump to a shot.
+Open the [site entry](http://127.0.0.1:8780/OpenDirector/), or go directly to the [English page](http://127.0.0.1:8780/OpenDirector/en/) or the [Simplified Chinese page](http://127.0.0.1:8780/OpenDirector/zh-cn/). The site entry uses your last manual language choice, then the browser language, and defaults to English if neither selects a supported language. With JavaScript disabled, the entry offers links to both pages. Vite supports the byte-range requests the player uses to jump to a shot.
 
-The local preview uses the production URLs in each page's canonical and `hreflang` links and in the [sitemap](http://127.0.0.1:8780/OpenDirector/sitemap.xml).
+The local preview uses production URLs for canonical and `hreflang` links. The site entry is the `x-default` alternate. The [sitemap](http://127.0.0.1:8780/OpenDirector/sitemap.xml) lists only the two language pages.
 
 ## Set up GitHub Pages
 
 1. In `ThinkFlowLab/OpenDirector`, a repository maintainer or admin opens **Settings > Pages**. Under **Build and deployment**, set **Source** to **GitHub Actions**. The repository supplies the [Website workflow](../.github/workflows/website.yml) and its deployment permissions. It uses GitHub's built-in token.
 2. Merge the website changes into `main`. The Website workflow builds the site and runs its Chromium checks. When they pass, the workflow deploys to the `github-pages` environment. Pull requests run the checks only. To deploy the current `main` manually, open **Actions > Website > Run workflow**, select `main`, and click **Run workflow**.
-3. After `deploy` succeeds, open the production pages at [the English URL](https://thinkflowlab.github.io/OpenDirector/) and [the Chinese URL](https://thinkflowlab.github.io/OpenDirector/zh-cn/). Switch languages and check that each download points to the expected Release asset. Verify that each page's canonical points to itself, the `hreflang` links point to both production pages, and the [sitemap](https://thinkflowlab.github.io/OpenDirector/sitemap.xml) lists both URLs. To roll back a site change, revert it on `main`.
+3. After `deploy` succeeds, open the [site entry](https://thinkflowlab.github.io/OpenDirector/), the [English page](https://thinkflowlab.github.io/OpenDirector/en/), and the [Simplified Chinese page](https://thinkflowlab.github.io/OpenDirector/zh-cn/). Switch languages and check that each download points to the expected Release asset. Verify that each language page has a self-referencing canonical, the `hreflang` links include both language pages and the `x-default` entry, and the [sitemap](https://thinkflowlab.github.io/OpenDirector/sitemap.xml) lists only the two language pages. To roll back a site change, revert it on `main`.
 
 ## Publish a desktop release
 
@@ -37,15 +37,15 @@ OpenDirector includes the version in each installer filename. GitHub's `releases
 
 ### 本地预览
 
-在仓库根目录运行上面的命令。构建时需要联网读取公开的 GitHub Releases。如果缺少 Vite，先运行 `npm ci`。打开[英文首页](http://127.0.0.1:8780/OpenDirector/)或[中文首页](http://127.0.0.1:8780/OpenDirector/zh-cn/)。`/OpenDirector/` 默认显示英文。两种语言各有一个静态 HTML 页面，关闭 JavaScript 后仍可通过链接切换。Vite 支持分段读取视频，可以直接跳到所选镜头。
+在仓库根目录运行上面的命令。构建时需要联网读取公开的 GitHub Releases。如果缺少 Vite，先运行 `npm ci`。可以打开[网站入口](http://127.0.0.1:8780/OpenDirector/)，也可以直达[英文页](http://127.0.0.1:8780/OpenDirector/en/)或[简体中文页](http://127.0.0.1:8780/OpenDirector/zh-cn/)。网站入口优先采用上次手动选择的语言，其次采用浏览器语言。两者都未匹配到支持的语言时，默认进入英文页。关闭 JavaScript 后，仍可在入口手动选择语言。Vite 支持分段读取视频，可以直接跳到所选镜头。
 
-本地预览中，各页面的 canonical 和 `hreflang` 链接以及 [sitemap](http://127.0.0.1:8780/OpenDirector/sitemap.xml) 均使用生产网址。
+本地预览中的 canonical 和 `hreflang` 链接使用生产网址。网站入口对应 `x-default`。[站点地图](http://127.0.0.1:8780/OpenDirector/sitemap.xml)只列出两个语言页的生产网址。
 
 ### 首次配置 GitHub Pages
 
 1. 具有 Maintain 或 Admin 权限的维护者打开官方仓库 `ThinkFlowLab/OpenDirector` 的 **Settings > Pages**，在 **Build and deployment** 中将 **Source** 设为 **GitHub Actions**。仓库提供了 [Website 工作流](../.github/workflows/website.yml)，其中已声明部署权限，使用 GitHub 内置令牌。
 2. 将网站改动合入 `main`。Website 会构建网站并运行 Chromium 检查，通过后部署到 `github-pages` 环境。PR 只运行检查。需要手动部署时，打开 **Actions > Website > Run workflow**，选择 `main`，点击 **Run workflow**。
-3. `deploy` 成功后，分别打开[英文首页](https://thinkflowlab.github.io/OpenDirector/)和[中文首页](https://thinkflowlab.github.io/OpenDirector/zh-cn/)。切换语言，确认两个平台的下载链接指向预期的 Release 附件。检查各页面的 canonical 是否指向自身，`hreflang` 和 [sitemap](https://thinkflowlab.github.io/OpenDirector/sitemap.xml) 是否包含两个生产网址。如需回退网站，在 `main` 撤销对应改动。
+3. `deploy` 成功后，分别打开[网站入口](https://thinkflowlab.github.io/OpenDirector/)、[英文页](https://thinkflowlab.github.io/OpenDirector/en/)和[简体中文页](https://thinkflowlab.github.io/OpenDirector/zh-cn/)。切换语言，确认两个平台的下载链接指向预期的 Release 附件。检查两个语言页的 canonical 是否各自指向自身，`hreflang` 是否包含两个语言页和 `x-default` 入口，以及[站点地图](https://thinkflowlab.github.io/OpenDirector/sitemap.xml)是否只列出两个语言页。如需回退网站，在 `main` 撤销对应改动。
 
 ### 发布桌面版
 

@@ -66,6 +66,9 @@ a { color: inherit; text-underline-offset: .22em; }
 .languages { padding: 2px; border-radius: 20px; background: #ffffff07; border: 1px solid #ffffff30; }
 .languages a { display: grid; place-items: center; min-height: 25px; min-width: 39px; border-radius: 14px; color: #c7ced9; font-size: .77rem; text-decoration: none; }
 .languages [aria-current="page"] { background: #ffffff35; color: white; }
+.language-entry .languages { width: max-content; margin: 24px auto 0; }
+.language-entry .languages a { padding-inline: 16px; min-height: 44px; font-size: 1rem; }
+.language-entry .languages a:hover { background: #ffffff20; color: white; }
 
 .opening {
   isolation: isolate;

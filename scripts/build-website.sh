@@ -6,9 +6,10 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 node --check "$root/website/site.mjs"
 node --check "$root/website/ambient.mjs"
+node --check "$root/website/language.mjs"
 mkdir -p "$output"
 node "$root/website/build.mjs" "$output"
-cp "$root"/website/{site.css,showcase.css,ambient.mjs,site.mjs,messages.mjs,logo.png} "$output/"
+cp "$root"/website/{site.css,showcase.css,ambient.mjs,site.mjs,language.mjs,messages.mjs,logo.png} "$output/"
 cp "$root/docs/guides/assets/dota2-short-film-canvas.jpg" "$output/canvas.jpg"
 mkdir -p "$output/film"
 cp "$root"/website/film/*.jpg "$output/film/"

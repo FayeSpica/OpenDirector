@@ -3,14 +3,15 @@ import { readFile } from "node:fs/promises";
 import { launchBrowser } from "../tests/browser/engine.mjs";
 import { renderDownloadPage } from "./build.mjs";
 
-const url = process.env.WEBSITE_URL ?? "http://127.0.0.1:8780/OpenDirector/";
+const entryUrl = process.env.WEBSITE_URL ?? "http://127.0.0.1:8780/OpenDirector/";
 const repository = "https://github.com/ThinkFlowLab/OpenDirector";
 const canonicalRoot = "https://thinkflowlab.github.io/OpenDirector/";
+const preferenceKey = "opendirector.website.locale";
 const locales = [
   {
     lang: "en-US",
-    url,
-    canonical: canonicalRoot,
+    url: new URL("en/", entryUrl).href,
+    canonical: new URL("en/", canonicalRoot).href,
     title: "OpenDirector — Open-source AI Video Editor",
     tagline: /open-source AI video editor/i,
     intro: /canvas.*timeline/i,
@@ -22,7 +23,7 @@ const locales = [
   },
   {
     lang: "zh-CN",
-    url: new URL("zh-cn/", url).href,
+    url: new URL("zh-cn/", entryUrl).href,
     canonical: new URL("zh-cn/", canonicalRoot).href,
     title: "OpenDirector — 开源 AI 视频创作与剪辑工具",
     tagline: /开源.*AI.*视频/,
@@ -34,18 +35,36 @@ const locales = [
     shot: /哄孩子入睡/,
   },
 ];
-const alternateUrls = {
-  en: locales[0].canonical,
-  "zh-CN": locales[1].canonical,
-  "x-default": locales[0].canonical,
-};
-const filmUrl = new URL("film/we-can-still-win.mp4", url).href;
+const [english, chinese] = locales;
+const alternateUrls = { en: english.canonical, "zh-CN": chinese.canonical, "x-default": canonicalRoot };
+const filmUrl = new URL("film/we-can-still-win.mp4", entryUrl).href;
 
-async function assertPageLanguage(page, locale) {
-  assert.equal(page.url(), locale.url);
+async function assertPageLanguage(page, locale, expectedUrl = locale.url) {
+  assert.equal(page.url(), expectedUrl);
   assert.equal(await page.locator("html").getAttribute("lang"), locale.lang);
   assert.equal(await page.title(), locale.title);
   assert.match(await page.locator(".hero .tagline").innerText(), locale.tagline);
+}
+
+async function assertPageMetadata(page, canonical) {
+  assert.equal(await page.locator('head link[rel="canonical"]').getAttribute("href"), canonical);
+  const alternates = await page.locator('head link[rel="alternate"][hreflang]').evaluateAll(links =>
+    links.map(link => [link.hreflang, link.getAttribute("href")]),
+  );
+  assert.equal(alternates.length, Object.keys(alternateUrls).length);
+  assert.deepEqual(Object.fromEntries(alternates), alternateUrls);
+}
+
+function languageLink(page, locale) {
+  return page.locator(`a[data-lang="${locale.lang}"]`);
+}
+
+async function assertPreference(page, expected) {
+  assert.equal(await page.evaluate(key => localStorage.getItem(key), preferenceKey), expected);
+}
+
+async function setPreference(page, value) {
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), { key: preferenceKey, value });
 }
 
 async function checkStaticDownloads(page) {
@@ -77,6 +96,18 @@ async function checkStaticDownloads(page) {
 const browser = await launchBrowser();
 try {
   const staticPage = await browser.newPage({ javaScriptEnabled: false, reducedMotion: "reduce" });
+  const entryResponse = await staticPage.goto(entryUrl);
+  assert.equal(entryResponse.status(), 200);
+  assert.equal(staticPage.url(), entryUrl);
+  await assertPageMetadata(staticPage, canonicalRoot);
+  for (const locale of locales) {
+    const link = languageLink(staticPage, locale);
+    assert.ok(await link.isVisible());
+    assert.equal(await link.evaluate(anchor => anchor.href), locale.url);
+  }
+  await languageLink(staticPage, chinese).click();
+  await assertPageLanguage(staticPage, chinese);
+
   const staticDownloads = new Map();
   const descriptions = new Set();
   for (const locale of locales) {
@@ -90,12 +121,7 @@ try {
     const description = await staticPage.locator('head meta[name="description"]').getAttribute("content");
     assert.match(description ?? "", locale.tagline);
     descriptions.add(description);
-    assert.equal(await staticPage.locator('head link[rel="canonical"]').getAttribute("href"), locale.canonical);
-    const alternates = await staticPage.locator('head link[rel="alternate"][hreflang]').evaluateAll(links =>
-      links.map(link => [link.hreflang, link.getAttribute("href")]),
-    );
-    assert.equal(alternates.length, Object.keys(alternateUrls).length);
-    assert.deepEqual(Object.fromEntries(alternates), alternateUrls);
+    await assertPageMetadata(staticPage, locale.canonical);
     for (const target of ["download", "film"]) {
       assert.equal(await staticPage.locator(`#${target}`).count(), 1);
     }
@@ -106,7 +132,7 @@ try {
       `${repository}/blob/main/docs/guides/${locale.guide}`,
     );
     staticDownloads.set(locale.lang, await checkStaticDownloads(staticPage));
-    const switchLink = staticPage.locator(`a[data-lang="${otherLocale.lang}"]`);
+    const switchLink = languageLink(staticPage, otherLocale);
     assert.equal(await switchLink.evaluate(link => link.href), otherLocale.url);
     const currentLink = staticPage.locator('a[aria-current="page"][data-lang]');
     assert.equal(await currentLink.getAttribute("data-lang"), locale.lang);
@@ -117,7 +143,7 @@ try {
   assert.equal(descriptions.size, locales.length);
   assert.deepEqual(staticDownloads.get("en-US"), staticDownloads.get("zh-CN"));
 
-  const sitemap = await staticPage.request.get(new URL("sitemap.xml", url).href);
+  const sitemap = await staticPage.request.get(new URL("sitemap.xml", entryUrl).href);
   assert.equal(sitemap.status(), 200);
   const listedUrls = await staticPage.evaluate(xml => {
     const document = new DOMParser().parseFromString(xml, "application/xml");
@@ -130,17 +156,48 @@ try {
   assert.deepEqual(listedUrls.sort(), locales.map(locale => locale.canonical).sort());
   await staticPage.close();
 
+  const routingCases = [
+    { browserLocale: "en-US", preference: null, destination: english },
+    { browserLocale: "zh-TW", preference: null, destination: chinese },
+    { browserLocale: "fr-FR", preference: null, destination: english },
+    { browserLocale: "zh-CN", preference: "en-US", destination: english },
+    { browserLocale: "en-US", preference: "zh-CN", destination: chinese },
+    { browserLocale: "zh-SG", preference: "invalid", destination: chinese },
+  ];
+  const entrySuffix = "?utm_source=website-test#download";
+  for (const { browserLocale, preference, destination } of routingCases) {
+    const page = await browser.newPage({ locale: browserLocale, reducedMotion: "reduce" });
+    const previousUrl = new URL("?from=previous-page", english.url).href;
+    await page.goto(previousUrl);
+    if (preference !== null) await setPreference(page, preference);
+    await page.goto(new URL(entrySuffix, entryUrl).href, { waitUntil: "commit" });
+    const destinationUrl = new URL(entrySuffix, destination.url).href;
+    await page.waitForURL(destinationUrl);
+    await assertPageLanguage(page, destination, destinationUrl);
+    await assertPreference(page, preference);
+    await page.goBack();
+    await assertPageLanguage(page, english, previousUrl);
+    await page.close();
+  }
+
   for (const locale of locales) {
     const otherLocale = locales.find(other => other !== locale);
     const page = await browser.newPage({ locale: otherLocale.lang, reducedMotion: "reduce" });
-    await page.addInitScript(savedLocale => {
-      localStorage.setItem("opendirector.website.locale", savedLocale);
+    await page.addInitScript(() => {
       Object.defineProperty(navigator, "userAgentData", {
         value: { platform: "macOS", getHighEntropyValues: async () => ({ architecture: "x86", bitness: "64" }) },
       });
-    }, otherLocale.lang);
+    });
     await page.goto(locale.url);
     await assertPageLanguage(page, locale);
+    await assertPreference(page, null);
+    await setPreference(page, otherLocale.lang);
+    const directUrl = new URL("?utm_source=website-test#film", locale.url).href;
+    await page.goto(directUrl);
+    await assertPageLanguage(page, locale, directUrl);
+    await assertPageMetadata(page, locale.canonical);
+    await assertPreference(page, otherLocale.lang);
+    await page.goto(locale.url);
     const downloads = staticDownloads.get(locale.lang);
     const menu = page.locator(".hero summary");
     if (downloads.length) {
@@ -156,8 +213,16 @@ try {
       assert.equal(await page.locator(".hero .actions").getByRole("link").getAttribute("href"), "#install-heading");
     }
 
-    await page.locator(`a[data-lang="${otherLocale.lang}"]`).click();
+    await languageLink(page, locale).click();
+    await assertPageLanguage(page, locale);
+    await assertPreference(page, locale.lang);
+    await page.goto(entryUrl, { waitUntil: "commit" });
+    await page.waitForURL(locale.url);
+    await assertPageLanguage(page, locale);
+
+    await languageLink(page, otherLocale).click();
     await assertPageLanguage(page, otherLocale);
+    await assertPreference(page, otherLocale.lang);
     await page.route(filmUrl, route => route.fulfill({ status: 404 }));
     const film = page.locator(".film-player video");
     await Promise.all([

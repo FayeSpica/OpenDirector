@@ -6,7 +6,7 @@ import { messages } from "./messages.mjs";
 const siteUrl = "https://thinkflowlab.github.io/OpenDirector/";
 const repository = "https://github.com/ThinkFlowLab/OpenDirector";
 const pages = {
-  "en-US": { path: "", hreflang: "en" },
+  "en-US": { path: "en/", hreflang: "en" },
   "zh-CN": { path: "zh-cn/", hreflang: "zh-CN" },
 };
 
@@ -17,6 +17,14 @@ const alternates = [
 
 function escapeHtml(value) {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function renderPage(template, values, html) {
+  return template.replace(/{{(\w+)}}/g, (_, key) => {
+    if (Object.hasOwn(html, key)) return html[key];
+    if (Object.hasOwn(values, key)) return escapeHtml(values[key]);
+    throw new Error(`Missing website template value ${key}`);
+  });
 }
 
 export function renderDownloadPage(template, installers, locale = "en-US") {
@@ -43,13 +51,12 @@ export function renderDownloadPage(template, installers, locale = "en-US") {
   }
 
   const chinese = locale === "zh-CN";
-  const siteRoot = chinese ? "../" : "./";
   const values = {
     ...copy,
     locale,
-    siteRoot,
-    englishHref: siteRoot,
-    chineseHref: chinese ? "./" : `./${pages["zh-CN"].path}`,
+    siteRoot: "../",
+    englishHref: `../${pages["en-US"].path}`,
+    chineseHref: `../${pages["zh-CN"].path}`,
     canonical: siteUrl + page.path,
     ogLocale: locale.replace("-", "_"),
     shareImage: `${siteUrl}canvas.jpg`,
@@ -65,22 +72,28 @@ export function renderDownloadPage(template, installers, locale = "en-US") {
     desktopOptions: options.join("\n"),
     desktopNotes: releaseNotes.join("\n    "),
   };
-  return template.replace(/{{(\w+)}}/g, (_, key) => {
-    if (Object.hasOwn(html, key)) return html[key];
-    if (Object.hasOwn(values, key)) return escapeHtml(values[key]);
-    throw new Error(`Missing website template value ${key} for ${locale}`);
-  });
+  return renderPage(template, values, html);
 }
 
 if (import.meta.main) {
   const output = process.argv[2];
-  const template = await readFile(new URL("index.html", import.meta.url), "utf8");
+  const [template, entry] = await Promise.all([
+    readFile(new URL("index.html", import.meta.url), "utf8"),
+    readFile(new URL("entry.html", import.meta.url), "utf8"),
+  ]);
   const installers = await resolveInstallers();
   for (const [locale, { path }] of Object.entries(pages)) {
     const pageDirectory = join(output, path);
     await mkdir(pageDirectory, { recursive: true });
     await writeFile(join(pageDirectory, "index.html"), renderDownloadPage(template, installers, locale));
   }
+  await writeFile(join(output, "index.html"), renderPage(entry, {
+    canonical: siteUrl,
+    englishHref: `./${pages["en-US"].path}`,
+    chineseHref: `./${pages["zh-CN"].path}`,
+    englishLanguage: messages["en-US"].language,
+    chineseLanguage: messages["zh-CN"].language,
+  }, { alternates }));
   const urls = Object.values(pages).map(({ path }) => `  <url><loc>${siteUrl}${path}</loc></url>`);
   await writeFile(join(output, "sitemap.xml"), [
     '<?xml version="1.0" encoding="UTF-8"?>',
