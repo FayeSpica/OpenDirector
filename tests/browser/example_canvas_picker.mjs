@@ -69,9 +69,11 @@ const browser = await chromium.launch({
 });
 try {
   const page = await browser.newPage({ locale: "zh-CN", viewport: { width: 1500, height: 1000 } });
-  await page.addInitScript(() =>
-    localStorage.setItem("opendirector.modelSetup.v1", "dismissed"),
-  );
+  await page.addInitScript(() => {
+    if (!new URLSearchParams(location.search).has("setup")) {
+      localStorage.setItem("opendirector.modelSetup.v1", "dismissed");
+    }
+  });
   page.setDefaultTimeout(15000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -124,6 +126,30 @@ try {
   await page.getByRole("button", { name: "体验图片示例" }).click();
   await page.getByText(/服务器返回的是网页/).waitFor();
   assert.equal(await page.locator(".react-flow__node").count(), 0);
+
+  // 4. Browsing from setup leaves step two available until an example lands.
+  await page.evaluate(() => localStorage.removeItem("opendirector.modelSetup.v1"));
+  await page.route("**/assistant/runtimes/default/status", (route) => route.fulfill({ json: {
+    id: "default", label: "Default", group: "default", modelSource: "settings",
+    modelOverride: false, available: true, status: "ready",
+  } }));
+  await page.goto(`${base}/ai-tool/ai-canvas/${projectId}?setup=welcome`);
+  const welcome = page.locator("dialog.cw-welcome");
+  await welcome.getByRole("button", { name: "开始设置", exact: true }).click();
+  await welcome.getByRole("button", { name: "配置语言模型", exact: true }).click();
+  await welcome.getByRole("button", { name: /^fixture-agent/ }).click();
+  await welcome.getByRole("button", { name: "查看示例", exact: true }).click();
+  const imageExample = dialog.getByRole("listitem").filter({ hasText: "图像创作示例画布" });
+  await imageExample.getByRole("button", { name: "下载并导入", exact: true }).click();
+  await imageExample.getByText(/服务器返回的是网页/).waitFor();
+  assert.equal(await page.evaluate(() => localStorage.getItem("opendirector.modelSetup.v1")), null);
+  await page.unroute(samplePattern);
+  await page.route(samplePattern, (route) => route.fulfill(served()));
+  await imageExample.getByRole("button", { name: "重试", exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+  await welcome.waitFor({ state: "hidden" });
+  await page.waitForFunction(() => document.querySelectorAll(".react-flow__node").length === 2);
+  assert.equal(await page.evaluate(() => localStorage.getItem("opendirector.modelSetup.v1")), "dismissed");
 
   assert.deepEqual(errors, []);
 } finally {

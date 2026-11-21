@@ -73,6 +73,7 @@ const workflows = [
     args: ["--full-creation"],
     env: { PYTHON: "python" },
   },
+  { name: "first-run setup", script: "tests/browser/first_run.mjs" },
 ];
 
 const failures = [];

@@ -98,6 +98,12 @@
       "note": "Requires a fresh isolated assistant fixture workspace."
     },
     {
+      "file": "first_run.mjs",
+      "previewSafe": true,
+      "lanes": ["gate"],
+      "note": "First launch: assistant prerequisite, task-specific model setup and direct access to examples."
+    },
+    {
       "file": "canvas_crop.mjs",
       "previewSafe": true,
       "lanes": [
