@@ -86,7 +86,7 @@ English summary: a Job created by an Agent `generation.submit` records `agentRun
 
 | Harness | 执行约束 |
 | --- | --- |
-| OpenCode | 工具权限配置开放 Shell、文件读取、已发现技能和业务 CLI |
+| OpenCode | 工具权限配置开放 Shell、文件读取、已发现技能、结构化业务工具和业务 CLI |
 | Codex | workspace-write 沙箱，开放 Shell 和业务 CLI |
 | Claude Code | 明确允许 Skill、Bash、Read 和业务 CLI |
 | JiuwenSwarm | 明确允许 skill_tool、list_skill、read_file、bash 和业务 CLI |
@@ -99,6 +99,10 @@ Windows 上的 Codex 启动显式设置 `windows.sandbox="elevated"`，避免隔
 On Windows, Codex explicitly sets `windows.sandbox="elevated"` so ignoring user configuration does not downgrade `workspace-write` to read-only and block Shell execution. Sandbox restrictions remain enabled. Discover the CLI with `Get-Command opendirector` in PowerShell or `command -v opendirector` in POSIX shells.
 
 CLI 通过环境变量中的本轮本地 Socket 地址连接业务网关，不使用连接令牌或凭据文件。网关继续校验工程范围、轮次生命周期及业务输入。
+
+内置 OpenCode 通过每轮专用的回环 MCP 连接调用结构化业务工具。结构化工具和 CLI 共用工程范围校验、业务命令、回执和幂等规则。`read_project` 可一次读取工程快照、模型选择和指定业务命令的契约。创建生成节点时，`create_generation_node` 用统一接口解析生成类型、模型和布局，并按请求创建节点或继续提交生成。提交失败时返回已创建节点的回执，供该轮继续处理。监听启动失败时，内置 OpenCode 仍可通过 CLI 执行业务操作。其他 Harness 继续使用各自的 CLI 接入方式。
+
+Bundled OpenCode invokes structured project tools through a turn-scoped loopback MCP connection. The structured tools and CLI share project scoping, business commands, receipts, and idempotency. `read_project` can return the project snapshot, model choices, and selected command contracts in one call. `create_generation_node` resolves the generation kind, model, and layout through one interface and can submit the generation on request. If submission fails, it returns the node creation receipt so the turn can continue from it. Bundled OpenCode retains CLI access if the listener fails to start. Other harnesses continue to use their existing CLI integration.
 
 ## 对话轨迹页 / Conversation trace page
 

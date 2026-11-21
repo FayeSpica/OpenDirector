@@ -28,8 +28,13 @@ const cases = [
   { id: "zh-empty", locale: "zh-CN", populated: false },
   { id: "zh-populated", locale: "zh-CN", populated: true },
 ];
+const fixedImagePrompt = "A red ceramic mug on a pale blue table in soft window light.";
+const fixedCase = {
+  id: "fixed", locale: "en-US", populated: false, imagePrompt: fixedImagePrompt,
+  prompt: `Generate one image on the canvas. Set the generation size to 2048x2048 and output format to PNG. Use this exact image prompt: "${fixedImagePrompt}" Keep the image visible on the canvas.`,
+};
 const caseId = process.env.AGENT_IMAGE_CASE;
-const selectedCases = caseId ? cases.filter((entry) => entry.id === caseId) : cases;
+const selectedCases = caseId ? [...cases, fixedCase].filter((entry) => entry.id === caseId) : cases;
 assert.ok(selectedCases.length, `Unknown AGENT_IMAGE_CASE: ${caseId}`);
 const firstCanvasBudgetMs = 3_000;
 const size = "2048x2048";
@@ -177,7 +182,7 @@ function measureOnClick(button, { timeout, existingIds }) {
   }, { capture: true, once: true });
 }
 
-async function verify(project, prompt, before, timing, previewDigest) {
+async function verify(project, prompt, before, timing, previewDigest, exactImagePrompt) {
   const deadline = performance.now() + timeout;
   let conversation;
   do {
@@ -214,6 +219,7 @@ async function verify(project, prompt, before, timing, previewDigest) {
   assert.equal(job.inputSnapshot.spec.kind, "image");
   assert.equal(job.inputSnapshot.spec.modelConfigId, image.id);
   const generationPrompt = job.inputSnapshot.spec.prompt;
+  if (exactImagePrompt) assert.equal(generationPrompt, exactImagePrompt);
   assert.match(generationPrompt, /mug|cup|[杯盃]/iu, "Job must preserve the requested subject");
   assert.match(generationPrompt, /red|红|紅/iu, "Job must preserve the requested mug color");
   assert.match(generationPrompt, /blue|蓝|藍/iu, "Job must preserve the requested table color");
@@ -312,7 +318,8 @@ async function run(browser, scenario, sample, warmup) {
     if (!(await panel.isVisible())) {
       await page.getByRole("button", { name: labels.openChat, exact: true }).click();
     }
-    await panel.getByRole("textbox", { name: labels.message, exact: true }).fill(labels.prompt);
+    const prompt = scenario.prompt ?? labels.prompt;
+    await panel.getByRole("textbox", { name: labels.message, exact: true }).fill(prompt);
     const send = panel.getByRole("button", { name: labels.send, exact: true });
     await send.evaluate(measureOnClick, { timeout, existingIds });
     await send.click();
@@ -324,7 +331,7 @@ async function run(browser, scenario, sample, warmup) {
       const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
       return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
     });
-    const ids = await verify(project, labels.prompt, before, timing, previewDigest);
+    const ids = await verify(project, prompt, before, timing, previewDigest, scenario.imagePrompt);
     assert.deepEqual(errors, []);
     return { sample, warmup, projectId, existingIds, ...ids, ...timing,
       withinBudget: timing.firstCanvasMs <= firstCanvasBudgetMs };
@@ -344,7 +351,7 @@ async function run(browser, scenario, sample, warmup) {
 
 const browser = await launchBrowser();
 console.log(JSON.stringify({ type: "configuration", variant, runtime: "default", mode: apiHealth.mode ?? "fixture",
-  cases: selectedCases.map((entry) => ({ ...entry, prompt: locales[entry.locale].prompt })),
+  cases: selectedCases.map((entry) => ({ ...entry, prompt: entry.prompt ?? locales[entry.locale].prompt })),
   imageModel: image.modelId, agentModel: agent.modelId, runs, warmups, timeout, firstCanvasBudgetMs,
   browser: browser.browserType().name(), browserVersion: browser.version(), platform: process.platform, arch: process.arch,
 }));

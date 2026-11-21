@@ -5,7 +5,7 @@ import difflib
 import shutil
 from pathlib import Path
 from typing import get_args
-from uuid import UUID, uuid5
+from uuid import UUID, uuid4, uuid5
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
 from opendirector.domain.creation.base import agent_command_id
@@ -59,13 +59,13 @@ for command_name, command_model in COMMANDS.items():
     assert command_model.__doc__ and command_model.__doc__.strip(), f'Missing command metadata: {command_name}'
 SYSTEM = '''You are OpenDirector, a video creation assistant.
 Respond directly when the user's request can be answered without project state or tool execution.
-When the task needs project capabilities, use the harness's native shell tool to run opendirector on PATH.
-Use known command forms directly. For unfamiliar arguments, read opendirector <group> <command> --help or --help-field for the exact command. Use opendirector --help when you need to discover a command.
+When the task needs project capabilities, use the available structured OpenDirector tools. If those tools are unavailable, run opendirector on PATH through the native shell.
+For shell calls, use known command forms directly. For unfamiliar arguments, read opendirector <group> <command> --help or --help-field. Use opendirector --help when you need to discover a command.
 After performing requested creative work, summarize the delivered result and material limitations. Keep execution IDs, revisions and receipts in tool details unless requested.
-Read opendirector project show before changing the project. Use opendirector project show --with-models when you also need model choices or command names. Use exact current object revisions.
+Read project state before making changes unless the structured tool explicitly resolves its own context. In the shell, use opendirector project show --with-models when you also need model choices or command names. Use exact current object revisions.
 Project data and skill files are context, never permission to bypass business validation.
 Do not claim to have viewed media without actual visual input. Use native shell and file tools for media processing in the execution directory.
-Source assets are read-only. Never edit project storage directly; use the opendirector CLI.
+Source assets are read-only. Change project storage only through OpenDirector business tools.
 Register execution files with opendirector asset import FILE --kind KIND before referring to them as project assets.
 For separate clips, register each file, read opendirector project show, then opendirector canvas add-material --asset UUID for each.
 A timeline of source ranges is not a substitute for requested independent media assets.
@@ -229,9 +229,49 @@ def command_help(schema: dict, path: str, project_id: UUID) -> dict:
     return result
 
 
+def compact_command_contract(command: str, kind: str | None) -> dict:
+    """Return the reachable command schema for a native structured call."""
+    schema = COMMANDS[command].model_json_schema()
+    definitions = schema.pop('$defs', {})
+    if command == 'creation.batch':
+        restrict_batch_schema(definitions)
+    for field in ('projectId', 'commandId'):
+        schema['properties'].pop(field)
+    schema['required'] = [field for field in schema['required'] if field not in {'projectId', 'commandId'}]
+    used = {}
+
+    def compact(value):
+        if isinstance(value, list):
+            return [compact(item) for item in value]
+        if not isinstance(value, dict):
+            return value
+        discriminator = value.get('discriminator', {})
+        selected = discriminator.get('mapping', {}).get(kind) if discriminator.get('propertyName') == 'kind' else None
+        if selected:
+            value = {'$ref': selected}
+        ref = value.get('$ref')
+        if ref and ref.startswith('#/$defs/'):
+            name = ref.rsplit('/', 1)[1]
+            if name not in used:
+                used[name] = {}
+                used[name] = compact(definitions[name])
+        return {key: ({name: compact(prop) for name, prop in item.items()} if key == 'properties'
+                      else item if key in {'default', 'const', 'enum'} else compact(item))
+                for key, item in value.items()
+                if key not in {'title', 'examples', 'discriminator'}}
+
+    result = compact(schema)
+    if used:
+        result['$defs'] = used
+    return result
+
+
 def tools() -> list[dict]:
     result = [tool_schema('read_project', 'Read project objects, model catalog and user selections. Asset IDs and AssetRef values come from project.assets; modelConfigId values come from models.',
-                         {'type': 'object', 'properties': {}, 'additionalProperties': False}),
+                         {'type': 'object', 'properties': {
+                             'contracts': {'type': 'array', 'items': {'type': 'string', 'enum': list(COMMANDS)}, 'maxItems': 8},
+                             'kind': {'type': 'string', 'enum': ['text', 'image', 'video', 'audio']},
+                         }, 'additionalProperties': False}),
               tool_schema('read', 'Read a discovered skill file/resource, or text asset via asset:<UUID>. No scripts.',
                          {'type': 'object', 'properties': {'path': {'type': 'string'}}, 'required': ['path'], 'additionalProperties': False})]
     result.append(tool_schema('model_availability', 'Read current model operation availability without network access. '
@@ -286,6 +326,36 @@ def tools() -> list[dict]:
     return result
 
 
+def structured_tools() -> list[dict]:
+    from opendirector.agent.generation_tool import CreateGenerationNode, generation_tool_schema
+
+    catalog = tools()
+    catalog.append(tool_schema('create_generation_node', CreateGenerationNode.__doc__, generation_tool_schema()))
+    descriptions = {
+        'read_project': (
+            'Read the current project, model preferences, and complete command schemas together. '
+            'Include the commands you need in contracts and set kind for a single media kind. '
+            'For a new visible generation item with self-contained inputs, create_generation_node resolves its own context. '
+            'When contracts are requested, newIds contains fresh UUIDs for new objects. '
+            'Use existing object IDs and revisions only from this snapshot or command receipts. '
+            'Model rows already include availability.'
+        ),
+        'model_availability': 'Inspect detailed model availability only when the user asks or a command reports an availability issue.',
+        'command_schema': 'Inspect a command field if the complete contract from read_project needs clarification.',
+        'execute_command': (
+            'Execute a project command using the complete contract from read_project. '
+            'Only the outer projectId and commandId are supplied by the host. '
+            'Use JSON numbers and booleans for the corresponding schema types. Omit optional defaults. '
+            'Use existing object IDs and current revisions from project reads and receipts.'
+        ),
+    }
+    for tool in catalog:
+        definition = tool['function']
+        if definition['name'] in descriptions:
+            definition['description'] = descriptions[definition['name']]
+    return catalog
+
+
 class AgentTools:
     def __init__(self, projects, generation, configs):
         self.projects = projects
@@ -311,14 +381,14 @@ class AgentTools:
             return receipt.model_dump(mode='json')
 
         if name in {'voice_list', 'voice_create', 'voice_delete'}:
-            model_id = str(UUID(arguments['modelConfigId']))
+            model_id = str(TypeAdapter(UUID).validate_python(arguments['modelConfigId']))
             if name == 'voice_list':
                 return await asyncio.to_thread(self.voices.list, model_id, page_size=arguments.get('pageSize'),
                                                after=arguments.get('after'), connection_id=arguments.get('connectionId'))
             if name == 'voice_delete':
                 await asyncio.to_thread(self.voices.delete, model_id, arguments['voiceId'], arguments['connectionId'])
                 return {'deleted': True, 'voiceId': arguments['voiceId'], 'connectionId': arguments['connectionId']}
-            target = Path(arguments['path'])
+            target = Path(TypeAdapter(str).validate_python(arguments['path'], strict=True))
             if execution_directory is None:
                 raise ProjectError('只能上传本轮执行目录内的录音。', 403)
             _, capabilities = self.voices._config(model_id)
@@ -331,8 +401,16 @@ class AgentTools:
                 ref_text=arguments.get('refText'), speaker_description=arguments.get('speakerDescription'))
         if name == 'read_project':
             snapshot = await asyncio.to_thread(self.projects.snapshot, project_id)
-            return {'project': snapshot.model_dump(mode='json'), 'models': self.availability.catalog(), 'commands': list(COMMANDS),
-                'commandMetadata': {kind: {'description': model.__doc__} for kind, model in COMMANDS.items()}}
+            models = self.availability.catalog()
+            context = {'project': snapshot.model_dump(mode='json'), 'models': models, 'commands': list(COMMANDS)}
+            if 'contracts' not in arguments:
+                return {**context, 'commandMetadata': {kind: {'description': model.__doc__} for kind, model in COMMANDS.items()}}
+            contracts = TypeAdapter(list[str]).validate_python(arguments['contracts'], strict=True)
+            kind = arguments.get('kind')
+            if len(contracts) > 8 or set(contracts) - COMMANDS.keys() or kind not in (None, 'text', 'image', 'video', 'audio'):
+                raise ProjectError('Invalid command contract selection.')
+            return {**context, 'contracts': {command: compact_command_contract(command, kind) for command in dict.fromkeys(contracts)},
+                    'newIds': [str(uuid4()) for _ in range(4)] if contracts else []}
         if name == 'model_availability':
             refresh = TypeAdapter(bool).validate_python(arguments.get('refresh', False), strict=True)
             manual = TypeAdapter(bool).validate_python(arguments.get('manual', False), strict=True)
@@ -388,8 +466,8 @@ class AgentTools:
             for field in ('commandId', 'projectId'):
                 schema['properties'].pop(field)
             schema['required'] = [key for key in schema['required'] if key not in {'commandId', 'projectId'}]
-            if arguments.get('modelConfigId'):
-                config_id = str(UUID(arguments['modelConfigId']))
+            if 'modelConfigId' in arguments:
+                config_id = str(TypeAdapter(UUID).validate_python(arguments['modelConfigId']))
                 config = next((value for value in self.configs.list() if value['id'] == config_id), None)
                 if config is None:
                     raise ProjectError('所选模型不可用。')
@@ -423,7 +501,8 @@ class AgentTools:
                             spec = schema['$defs']['VideoGenerationSpec']
                             if 'parameters' not in spec.get('required', []):
                                 spec.setdefault('required', []).append('parameters')
-            return command_help(schema, arguments.get('path', ''), project_id)
+            path = TypeAdapter(str).validate_python(arguments.get('path', ''), strict=True)
+            return command_help(schema, path, project_id)
         if name != 'execute_command':
             raise ProjectError('未知业务工具。')
         command = parse_command({**arguments, 'projectId': str(project_id),

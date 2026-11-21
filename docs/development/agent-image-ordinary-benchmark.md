@@ -30,6 +30,10 @@ node tests/browser/agent_image_ordinary.mjs
 AGENT_IMAGE_PARAPHRASES=1 node tests/browser/agent_image_ordinary.mjs
 ```
 
+To compare shared Agent runtime changes on the same input, run `AGENT_IMAGE_CASE=fixed AGENT_IMAGE_RUNS=5 node tests/browser/agent_image_ordinary.mjs`. This repeats the fixed 2048×2048 PNG request on a fresh canvas and checks the exact saved generation prompt in addition to the node, job, and asset checks.
+
+对比共享 Agent 运行时改动时，可用 `AGENT_IMAGE_CASE=fixed AGENT_IMAGE_RUNS=5 node tests/browser/agent_image_ordinary.mjs` 在空画布上重复发送同一条 2048×2048 PNG 请求。脚本同时校验保存的生图提示词、节点、任务和素材。
+
 The runner emits raw samples and per-case summaries as JSON Lines. Check `withinBudget` alongside successful generation and the two duration metrics.
 
 脚本以 JSON Lines 输出逐次记录和各场景汇总。结合生成成功数和两项耗时核对 `withinBudget`。

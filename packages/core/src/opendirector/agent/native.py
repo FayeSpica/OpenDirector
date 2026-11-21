@@ -1,4 +1,4 @@
-"""CLI runtimes use native skills and a turn-scoped business CLI."""
+"""Native runtimes use native skills and turn-scoped project tools."""
 import asyncio
 from contextlib import AsyncExitStack
 import json
@@ -18,6 +18,7 @@ from opendirector.agent.cli_discovery import cli_executable
 from opendirector.agent.context import RunContext
 from opendirector.agent.citations import search_sources
 from opendirector.agent.gateway import ToolGateway
+from opendirector.agent.mcp_transport import TurnMcp
 from opendirector.agent.process import terminate
 from opendirector.agent.tools import ROOT, SYSTEM
 from opendirector.installation import BUNDLED
@@ -85,7 +86,8 @@ def codex_session_available(session_id: str) -> bool:
 def command(runtime: str, work: Path, socket: str, token: str, model: str | None,
             model_url: str, catalog: list[dict], *, input_modalities: list[str] | None = None,
             bridge_env: dict[str, str] | None = None,
-            native_directory: Path | None = None) -> tuple[list[str], dict[str, str]]:
+            native_directory: Path | None = None,
+            mcp_url: str | None = None) -> tuple[list[str], dict[str, str]]:
     binary = executable(runtime)
     if binary is None:
         raise ProjectError(BUNDLED_INSTALL_ERROR if runtime == 'default' else f'{runtime} CLI 未安装，请先安装。', 503)
@@ -111,6 +113,21 @@ def command(runtime: str, work: Path, socket: str, token: str, model: str | None
                 'options': {'baseURL': model_url, 'apiKey': '{env:OPENDIRECTOR_MODEL_KEY}'},
                 'models': {model: {'name': model, 'modalities': {'input': input_modalities or ['text'], 'output': ['text']}}}}}
             env.update(XDG_CONFIG_HOME=str(work), OPENDIRECTOR_MODEL_KEY=token)
+            if mcp_url:
+                config['mcp']['opendirector'] = {'type': 'remote', 'url': mcp_url, 'oauth': False,
+                                                'headers': {'Authorization': f'Bearer {token}'}, 'timeout': 180000}
+                config['permission']['opendirector_*'] = 'allow'
+                config['agent']['opendirector']['prompt'] += (
+                    '\nUse the available opendirector_* structured tools first for project operations. '
+                    'For any new generation request whose inputs are already known, call '
+                    'opendirector_create_generation_node directly. Set submit=true only when the user asks to generate now. '
+                    'This tool resolves project context and model selection without a preceding project read or availability refresh. '
+                    'For new content, call tools that resolve their own project context directly. '
+                    'Before changing an existing object, read its current ID and revision with the structured tools. '
+                    'Apply the CLI discovery and project-show instructions only when using the CLI. '
+                    'Use the shell for local files and media, or for project CLI operations if the structured tools are unavailable.')
+                for key in ('NO_PROXY', 'no_proxy'):
+                    env[key] = ','.join(filter(None, [env.get(key), '127.0.0.1']))
         env.update(OPENCODE_DISABLE_EXTERNAL_SKILLS='1', OPENCODE_DISABLE_CLAUDE_CODE_SKILLS='1', OPENCODE_CONFIG_CONTENT=json.dumps(config))
         # OpenCode uses inherited PWD when resolving its local directory.
         env['PWD'] = str(native_directory or work)
@@ -201,7 +218,7 @@ class NativeRuntime:
             # directory. Keep that engine directory stable, while the gateway,
             # CLI, skills and all published outputs remain scoped to this turn.
             native_work = session_directory or work
-            server = model_server = model = None
+            server = model_server = model = mcp = None
             permissions = AsyncExitStack()
             try:
                 if runtime == 'deepseek':
@@ -223,7 +240,16 @@ class NativeRuntime:
                 gateway.roots = roots
                 endpoint = str(Path(temporary) / 'cli.sock')
                 server, bridge_env = await cli_transport.start_server(gateway, queue, endpoint, pending)
+                mcp_url = None
                 if run.runtime == 'default':
+                    turn_mcp = TurnMcp(gateway, queue, token)
+                    try:
+                        mcp_url = await turn_mcp.start()
+                    except OSError:
+                        # Keep the existing business CLI available if the MCP listener cannot bind.
+                        pass
+                    else:
+                        mcp = turn_mcp
                     model = ModelGateway(
                         config, thinking, token, str(project_id), str(turn_id), self.transport,
                         trace_path=work.parent.with_suffix('.model.jsonl'),
@@ -238,7 +264,8 @@ class NativeRuntime:
                     args, env = command(run.runtime, work, endpoint, token,
                         config['modelId'] if config else runtime_model, model_url, catalog, bridge_env=bridge_env,
                         **({'native_directory': native_work} if runtime == 'opencode' else {}),
-                        **({'input_modalities': config.get('inputModalities', ['text'])} if run.runtime == 'default' else {}))
+                        **({'input_modalities': config.get('inputModalities', ['text']), 'mcp_url': mcp_url}
+                            if run.runtime == 'default' else {}))
                 if runtime == 'opencode':
                     await windows_powershell.configure_opencode(args[0], native_work, env, Path(temporary))
                 if thinking != 'auto' and runtime == 'codex':
@@ -250,12 +277,14 @@ class NativeRuntime:
                         args += ['resume', session_id, '-']
                     else:
                         args += ['--session' if runtime == 'opencode' else '--resume', session_id]
+                project_instruction = ('Use structured OpenDirector tools for project operations.' if mcp_url else
+                    'Use opendirector for project changes. Consult command help when the command or its arguments are unfamiliar.')
                 execution_context = (f'Execution directory: {work}\nNative session directory: {native_work}\n'
                     'Set the native shell workdir to this execution directory for file and media operations. '
                     'Use inherited PATH to discover installed programs with Get-Command in PowerShell or command -v in POSIX shells. '
                     'Read source assets at their supplied absolute paths; do not move or modify them. '
                     'Write all intermediate files and outputs into the execution directory. '
-                    'Use opendirector for project changes. Consult command help when the command or its arguments are unfamiliar.')
+                    f'{project_instruction}')
                 prompt = execution_context + '\n' + json.dumps(context[-1:] if session_id else context, ensure_ascii=False)
                 skill_instruction = ''
                 if selected:
@@ -352,6 +381,8 @@ class NativeRuntime:
                     await pump
             finally:
                 try:
+                    if mcp:
+                        await mcp.close()
                     await gateway.close()
                     if server:
                         server.close()

@@ -477,10 +477,16 @@ def test_real_opencode_native_skill_and_gateway_write(tmp_path, runtime, resume,
             call = {'name':'skill','arguments':json.dumps({'name':'character-replacement'})}
         elif count == 2:
             assert 'Create a 24-FPS constant-frame-rate working copy' in json.dumps(payload['messages'])
-            assert not any('opendirector_' in tool['function']['name'] for tool in payload['tools'])
-            call = {'name': 'bash', 'arguments': json.dumps({
-                'command': "opendirector asset write-text --name real-native.md --text 'Real OpenCode plan'",
-                'description': 'Register the plan in the project'})}
+            names = {tool['function']['name'] for tool in payload['tools']}
+            assert {'bash', 'opendirector_read_project', 'opendirector_execute_command'} <= names
+            if resume:
+                call = {'name': 'opendirector_execute_command', 'arguments': json.dumps({
+                    'type': 'asset.writeText',
+                    'payload': {'name': 'real-native.md', 'text': 'Real OpenCode plan'}})}
+            else:
+                call = {'name': 'bash', 'arguments': json.dumps({
+                    'command': "opendirector asset write-text --name real-native.md --text 'Real OpenCode plan'",
+                    'description': 'Register the plan in the project'})}
         else:
             if count == 3:
                 receipt = json.loads(next(message['content'] for message in payload['messages']
@@ -517,7 +523,11 @@ def test_real_opencode_native_skill_and_gateway_write(tmp_path, runtime, resume,
         assets = client.get(path).json()['assets']
         assert len(assets) == 1 and assets[0]['name'] == 'real-native.md'
         assert len(write_receipts) == 1
-        assert assets[0]['id'] == write_receipts[0]['assetId']
+        if resume:
+            assert assets[0]['id'] in [change['id'] for change in write_receipts[0]['changed']
+                                       if change['objectType'] == 'asset']
+        else:
+            assert assets[0]['id'] == write_receipts[0]['assetId']
         assert len(requests) == 3
         saved = client.get(path + '/assistant').json()
         assert saved['skills'] == []

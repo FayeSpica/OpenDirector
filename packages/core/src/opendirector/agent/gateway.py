@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from opendirector.agent.context import AgentEvent, RunContext
-from opendirector.agent.tools import AgentTools, tools
+from opendirector.agent.tools import AgentTools, structured_tools
 from opendirector.domain.projects import ProjectError
 from opendirector.domain.creation.commands import COMMAND_MODELS
 
@@ -43,7 +43,9 @@ class ToolGateway:
         self.calls: dict[str, tuple[str, asyncio.Task[ToolResult]]] = {}
         self.lock = asyncio.Lock()
         self.execution_lock = asyncio.Lock()
-        self.names = {item['function']['name'] for item in tools()}
+        self.catalog = structured_tools()
+        self.schemas = {item['function']['name']: item['function']['parameters'] for item in self.catalog}
+        self.names = self.schemas.keys()
 
     async def call(self, call_id: str, name: str, arguments: dict[str, JsonValue]) -> ToolResult:
         identity = json.dumps([name, arguments], ensure_ascii=False, sort_keys=True)
@@ -66,16 +68,25 @@ class ToolGateway:
             try:
                 if self.closed:
                     raise ProjectError('本轮工具入口已关闭。', 409)
-                if not call_id or len(call_id) > 512 or name not in self.names:
+                if not call_id or len(call_id) > 512 or name not in self.schemas:
                     raise ProjectError('工具调用标识或名称无效。')
                 arguments = TypeAdapter(dict[str, JsonValue]).validate_python(arguments, strict=True)
-                schema = next(item['function']['parameters'] for item in tools() if item['function']['name'] == name)
+                schema = self.schemas[name]
                 if 'properties' in schema and (set(arguments) - set(schema['properties']) or set(schema.get('required', [])) - set(arguments)):
                     raise ProjectError('工具参数缺失或包含未定义字段。')
-                value = await self.business.execute(self.run.project_id, self.run.turn_id, self.run.session,
-                    call_id, name, arguments, self.roots, self.run.config,
-                    self.run.runtime if self.run.config is None else None,
-                    self.execution_directory)
+                if name == 'create_generation_node':
+                    from opendirector.agent.generation_tool import create_generation_node
+
+                    async def execute_command(inner_id, command):
+                        return await self.invoke(inner_id, 'execute_command', command)
+
+                    value = await create_generation_node(
+                        arguments, project_id=self.run.project_id, turn_id=self.run.turn_id, call_id=call_id,
+                        model_selections=self.model_selections, configs=self.business.configs,
+                        snapshot=self.business.projects.snapshot, execute=execute_command,
+                    )
+                else:
+                    value = await self.invoke(call_id, name, arguments)
                 if name == 'read_project':
                     value['modelSelections'] = dict(self.model_selections)
                 error = None
@@ -100,6 +111,11 @@ class ToolGateway:
                 if isinstance(failure, ProjectError):
                     details['code'] = failure.code
                 return ToolResult(value=details, error=str(failure))
+
+    async def invoke(self, call_id: str, name: str, arguments: dict[str, JsonValue]) -> JsonValue:
+        return await self.business.execute(self.run.project_id, self.run.turn_id, self.run.session,
+            call_id, name, arguments, self.roots, self.run.config,
+            self.run.runtime if self.run.config is None else None, self.execution_directory)
 
     async def close(self) -> None:
         self.closed = True
