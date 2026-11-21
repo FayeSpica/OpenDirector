@@ -191,3 +191,57 @@ async def test_preflight_failure_leaves_no_node_before_a_corrected_attempt(proje
     finally:
         await gateway.close()
         await runner.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('kind, settings', [
+    ('text', {'maxTokens': 700}),
+    ('image', {'size': '2048x2048', 'outputFormat': 'png'}),
+    ('video', {'durationSeconds': 5, 'generateAudio': False}),
+    ('audio', {'creationType': 'music', 'durationSeconds': 24, 'lyrics': 'First verse'}),
+])
+async def test_flat_settings_are_saved_for_each_media_kind(project, kind, settings):
+    store, pid, _ = project
+    provider = Provider()
+    runner, tools, _ = stack(project, provider)
+    gateway = generation_gateway(project, tools)
+    request = {'kind': kind, 'prompt': 'Set up a new generation', 'submit': False,
+               'parameters': {}, **settings}
+    try:
+        result = await gateway.call('flat-generation', 'create_generation_node', request)
+        assert result.error is None, result.value
+        state = store.snapshot(pid)
+        [item], [spec] = state.canvasItems, state.generationSpecs
+        assert item.visible and item.binding.objectRef.id == spec.id
+        assert item.kind == spec.kind == kind
+        assert {name: getattr(spec.parameters, name) for name in settings} == settings
+        assert not state.jobs and not provider.calls
+    finally:
+        await gateway.close()
+        await runner.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('kind, settings, issue', [
+    ('text', {'maxTokens': 700, 'parameters': {'maxTokens': 700}}, 'must appear only once'),
+    ('text', {'durationSeconds': 5}, 'durationSeconds'),
+    ('text', {'parameters': {'resolution': '720P'}}, 'resolution'),
+    ('video', {'generateAudio': 'false'}, 'generateAudio'),
+    ('audio', {'parameters': {'durationFromReference': 'false'}}, 'durationFromReference'),
+    ('audio', {'parameters': {'unsupportedParameter': True}}, 'unsupportedParameter'),
+])
+async def test_invalid_flat_and_nested_settings_do_not_write(project, kind, settings, issue):
+    store, pid, _ = project
+    provider = Provider()
+    runner, tools, _ = stack(project, provider)
+    gateway = generation_gateway(project, tools)
+    before = store.snapshot(pid)
+    try:
+        result = await gateway.call('invalid-generation', 'create_generation_node', {
+            'kind': kind, 'prompt': 'Set up a new generation', 'submit': False, **settings,
+        })
+        assert result.error and issue in result.error
+        assert store.snapshot(pid) == before and not provider.calls
+    finally:
+        await gateway.close()
+        await runner.close()

@@ -5,7 +5,7 @@ from collections.abc import Callable, Mapping
 from typing import Awaitable, Protocol
 from uuid import UUID, uuid5
 
-from pydantic import Field, JsonValue, TypeAdapter, ValidationError
+from pydantic import Field, JsonValue, ValidationError
 
 from opendirector.domain.creation.base import Contract, GenerationKind, Point, agent_command_id
 from opendirector.domain.creation.commands import CommandReceipt
@@ -16,14 +16,26 @@ from opendirector.domain.rule_facts import MAX_REFERENCES, PROMPT_MAX_LENGTH
 from opendirector.infrastructure.model_configs import ModelConfigs
 
 
+PARAMETER_MODELS: dict[GenerationKind, type[Contract]] = {
+    'text': TextParameters,
+    'image': ImageParameters,
+    'video': VideoParameters,
+    'audio': AudioParameters,
+}
+
+
 class CreateGenerationNode(Contract):
-    """Create one visible generation node and optionally start its generation."""
+    """Create one visible generation node and optionally start its generation.
+
+    Pass settings at the top level. Supply only settings required by the request
+    or selected model. Omit the rest to use defaults.
+    """
 
     kind: GenerationKind = Field(description='Kind of content the user requested.')
     prompt: str = Field(max_length=PROMPT_MAX_LENGTH, description='Generation instruction, retaining the user’s content and constraints.')
     submit: bool = Field(strict=True, description='Set true only when the user asks to start generation now. Set false for setup only.')
     modelConfigId: UUID | None = Field(default=None, description='Existing model configuration ID when explicitly requested. Otherwise use the turn selection or the only configured model of this kind. A setup-only node can remain unbound.')
-    parameters: dict[str, JsonValue] | None = Field(default=None, description='Only settings required by the request or the selected model. Omit other settings to use defaults. Put kind at the top level.')
+    parameters: dict[str, JsonValue] | None = Field(default=None, description='Legacy nested settings. Use top-level settings in new calls and provide each setting only once.')
     position: Point | None = Field(default=None, description='Canvas position if specifically requested. Omit to place next to existing nodes.')
     references: tuple[dict[str, JsonValue], ...] = Field(
         default=(), max_length=MAX_REFERENCES,
@@ -33,10 +45,41 @@ class CreateGenerationNode(Contract):
 
 def generation_tool_schema() -> dict:
     schema = CreateGenerationNode.model_json_schema()
-    parameters = TypeAdapter(TextParameters | ImageParameters | VideoParameters | AudioParameters | None).json_schema()
-    schema['$defs'].update(parameters.pop('$defs'))
-    schema['properties']['parameters'].update(parameters)
+    settings = {}
+    for kind, model in PARAMETER_MODELS.items():
+        contract = model.model_json_schema()
+        schema['$defs'].update(contract.get('$defs', {}))
+        for name, definition in contract['properties'].items():
+            settings.setdefault(name, {})[kind] = definition
+    for name, by_kind in settings.items():
+        variants = list(by_kind.values())
+        default = variants[0]
+        if all(variant == default for variant in variants):
+            definition = {**default, 'description': f"{default['description']} For {', '.join(by_kind)}."}
+        else:
+            definition = {'anyOf': [{**variant, 'description': f"{kind}: {variant['description']}"}
+                                   for kind, variant in by_kind.items()]}
+        schema['properties'][name] = definition
     return schema
+
+
+def parse_generation_request(arguments: dict[str, JsonValue]) -> tuple[CreateGenerationNode, dict[str, JsonValue] | None]:
+    fields = CreateGenerationNode.model_fields
+    request = CreateGenerationNode.model_validate({name: value for name, value in arguments.items() if name in fields})
+    flat = {name: value for name, value in arguments.items() if name not in fields}
+    if request.parameters is None and not flat:
+        return request, None
+
+    nested = dict(request.parameters or {})
+    if nested.get('kind') == request.kind:
+        # Older calls may repeat the outer discriminator inside the wrapper.
+        nested.pop('kind')
+    duplicates = nested.keys() & flat.keys()
+    if duplicates:
+        raise ValueError('Settings must appear only once: ' + ', '.join(sorted(duplicates)))
+    settings = nested | flat
+    PARAMETER_MODELS[request.kind].model_validate(settings, strict=True)
+    return request, settings
 
 
 class ExecuteCommand(Protocol):
@@ -54,7 +97,7 @@ async def create_generation_node(
     snapshot: Callable[[UUID], ProjectSnapshot],
     execute: ExecuteCommand,
 ) -> dict:
-    request = CreateGenerationNode.model_validate(arguments)
+    request, parameters = parse_generation_request(arguments)
     if any(ref.keys() & {'id', 'projectId', 'targetSpecId', 'revision'} for ref in request.references):
         raise ValueError('Reference bindings must omit id, projectId, targetSpecId and revision.')
 
@@ -86,11 +129,7 @@ async def create_generation_node(
     item_key = str(item_id)
     spec = {'id': spec_key, 'projectId': project_key, 'kind': request.kind, 'purpose': 'generation',
             'prompt': request.prompt, 'modelConfigId': selected_id}
-    if request.parameters is not None:
-        parameters = dict(request.parameters)
-        if parameters.get('kind') == request.kind:
-            # A repeated discriminator carries the same intent as the outer kind.
-            parameters.pop('kind')
+    if parameters is not None:
         spec['parameters'] = parameters
     item = {'id': item_key, 'projectId': project_key, 'kind': request.kind, 'position': position.model_dump(mode='json'),
             'binding': {'role': 'generation', 'objectRef': {'id': spec_key}}}

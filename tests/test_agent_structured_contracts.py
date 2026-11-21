@@ -26,14 +26,16 @@ def test_native_catalog_uses_batched_discovery_without_changing_cli_guidance():
 def test_native_generation_tool_advertises_all_media_parameter_contracts():
     native = {tool['function']['name']: tool['function'] for tool in structured_tools()}
     schema = native['create_generation_node']['parameters']
-    definitions = schema['$defs']
-    parameter_types = {choice['$ref'].rsplit('/', 1)[1] for choice in
-                       schema['properties']['parameters']['anyOf'] if '$ref' in choice}
-    fields = {'TextParameters': 'maxTokens', 'ImageParameters': 'size',
-              'VideoParameters': 'videoMode', 'AudioParameters': 'creationType'}
-    assert parameter_types == fields.keys()
-    for name, field in fields.items():
-        assert field in definitions[name]['properties']
+    settings = schema['properties']
+    assert settings['maxTokens']['type'] == 'integer'
+    assert settings['size']['type'] == 'string'
+    assert settings['generateAudio']['type'] == 'boolean'
+    assert settings['creationType']['enum'] == ['audio', 'music']
+    assert {option['description'].split(':', 1)[0] for option in settings['durationSeconds']['anyOf']} == {'audio', 'video'}
+    assert 'audio' in settings['voiceSelection']['description']
+    assert 'VoiceSelection' in schema['$defs']
+    assert not {'maxTokens', 'size', 'generateAudio', 'creationType'} & set(schema['required'])
+    assert schema['additionalProperties'] is False
 
 
 def test_batched_contract_keeps_the_selected_connections_choices():
