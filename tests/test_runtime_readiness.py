@@ -60,11 +60,13 @@ def test_opencode_cli_and_default_use_separate_model_paths(tmp_path, monkeypatch
 
     monkeypatch.setattr(runtime.native, 'executable', lambda name: '/bin/' + name)
     monkeypatch.setenv('XDG_CONFIG_HOME', '/existing/config')
+    monkeypatch.setenv('OPENCODE_DISABLE_CLAUDE_CODE_PROMPT', '0')
     cli_args, cli_env = runtime.native.command('opencode', tmp_path, '/tmp/socket', 'turn-token', 'local/my-model', '', [])
     cli_config = json.loads(cli_env['OPENCODE_CONFIG_CONTENT'])
     assert cli_args[0] == '/bin/opencode'
     assert cli_args[-1] == 'local/my-model'
     assert cli_env['XDG_CONFIG_HOME'] == '/existing/config'
+    assert cli_env['OPENCODE_DISABLE_CLAUDE_CODE_PROMPT'] == '0'
     assert 'provider' not in cli_config
     assert 'OPENDIRECTOR_MODEL_KEY' not in cli_env
     socket = tmp_path / 'turn' / 'cli.sock'
@@ -73,6 +75,7 @@ def test_opencode_cli_and_default_use_separate_model_paths(tmp_path, monkeypatch
     assert args[0] == '/bin/default'
     assert args[-1] == 'opendirector/project-model'
     assert env['XDG_CONFIG_HOME'] == str(socket.parent)
+    assert env['OPENCODE_DISABLE_CLAUDE_CODE_PROMPT'] == '1'
     assert config['provider']['opendirector']['options']['baseURL'] == 'http://loopback'
     assert runtime.runtime_spec('opencode').modelSource == 'cli'
     assert runtime.runtime_spec('default').modelSource == 'settings'

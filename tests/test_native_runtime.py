@@ -430,6 +430,9 @@ def test_real_opencode_default_hello_saves_direct_reply(tmp_path, monkeypatch, r
         # zero calls by disabling tools or forcing tool_choice=none.
         assert requests[0]['tool_choice'] == 'auto'
         assert any(tool['function']['name'] == 'bash' for tool in requests[0]['tools'])
+        system = '\n'.join(message['content'] for message in requests[0]['messages'] if message['role'] == 'system')
+        assert all('.claude/CLAUDE.md' not in line for line in system.replace('\\', '/').splitlines()
+                   if line.startswith('Instructions from:'))
         saved = client.get(path + '/assistant').json()
         assert len(saved['messages']) == 2
         assert saved['messages'][0]['text'] == 'hello'
