@@ -325,17 +325,13 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
    * Example canvases: one cached catalog feeds both the empty-state buttons and
    * the picker in the project menu.
    */
-  const [examplePicker, setExamplePicker] = useState<{
-    entries: ExampleEntry[];
-    fromWelcome: boolean;
-    visit: number;
-  } | null>(null);
+  const [exampleEntries, setExampleEntries] = useState<ExampleEntry[] | null>(null);
+  const [welcomeExampleId, setWelcomeExampleId] = useState<string | null>(null);
   const [firstRunArriving, setFirstRunArriving] = useState(false);
   const pendingFirstNodes = useRef<{ projectId: string; selection: string; nodes: CanvasNode[] } | null>(null);
   const finishFirstRun = () => {
     pendingFirstNodes.current = null;
     dismissModelSetup();
-    setExamplePicker(null);
     setFirstRunArriving(window.matchMedia("(prefers-reduced-motion: no-preference)").matches);
     setWelcomeOpen(false);
   };
@@ -349,15 +345,24 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
     if (exampleLoading) return;
     setExampleLoading(true);
     try {
-      const entries = await loadExamples();
-      setExamplePicker((previous) => ({
-        entries,
-        fromWelcome: welcomeOpen,
-        visit: (previous?.visit ?? 0) + 1,
-      }));
+      setExampleEntries(await loadExamples());
     } finally {
       setExampleLoading(false);
     }
+  };
+  const welcomeExampleImport = useExampleImport({
+    importCanvas: async (archive) => {
+      const { switched } = await importCanvasArchive(archive);
+      if (!switched) throw new Error(t("canvas.workspace.error.importNotApplied"));
+      finishFirstRun();
+    },
+  });
+  const openWelcomeExample = async () => {
+    const entries = await loadExamples();
+    const entry = entries.find((item) => item.id === VIDEO_EXAMPLE_ID) ?? entries[0];
+    if (!entry) throw new Error(t("canvas.example.dialog.empty"));
+    setWelcomeExampleId(entry.id);
+    await welcomeExampleImport.start(entry);
   };
   const exampleImport = useExampleImport({ importCanvas: importCanvasArchive });
   const [exampleMissing, setExampleMissing] = useState(false);
@@ -2895,7 +2900,11 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
       {welcomeOpen && <WelcomeScreen
         catalog={backendCatalog}
         projectId={doc.id}
-        onExamples={openExamplePicker}
+        exampleStatus={welcomeExampleId ? welcomeExampleImport.statuses[welcomeExampleId] : undefined}
+        onExamples={openWelcomeExample}
+        onCancelExample={() => {
+          if (welcomeExampleId) welcomeExampleImport.cancel(welcomeExampleId);
+        }}
         onImport={async (files) => {
           if (!(await importFiles(files, undefined, true))) {
             throw new Error(t("canvas.workspace.error.importNotApplied"));
@@ -2940,20 +2949,11 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
           onClose={() => setSettingsOpen(false)}
         />
       )}
-      {examplePicker && (
+      {exampleEntries && (
         <ExampleCanvasDialog
-          key={examplePicker.visit}
-          entries={examplePicker.entries}
-          fromWelcome={examplePicker.fromWelcome}
-          onClose={() => {
-            // Keep the closed native dialog mounted while its top-layer transition finishes.
-            if (!examplePicker.fromWelcome) setExamplePicker(null);
-          }}
-          onImport={async (archive) => {
-            const { switched } = await importCanvasArchive(archive);
-            if (!switched) throw new Error(t("canvas.workspace.error.importNotApplied"));
-            if (examplePicker.fromWelcome) finishFirstRun();
-          }}
+          entries={exampleEntries}
+          onClose={() => setExampleEntries(null)}
+          onImport={(archive) => importCanvasArchive(archive)}
         />
       )}
       {help && (

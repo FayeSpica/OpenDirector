@@ -233,10 +233,10 @@ try {
   assert.equal(await dismissed(), null);
   assert.ok(await imageTask.isChecked());
   assert.equal(await videoPicker.inputValue(), configured.id);
-  await welcome.getByRole("button", { name: "Browse examples", exact: true }).click();
-  const examples = page.locator(".cw-example-dialog:modal");
-  await examples.getByRole("button", { name: "Close", exact: true }).press("Escape");
-  await examples.waitFor({ state: "hidden" });
+  await page.route("**/api/example-canvases/video-canvas/download", (route) => route.fulfill({ status: 503 }));
+  await welcome.getByRole("button", { name: "Open an example canvas", exact: true }).click();
+  await welcome.getByRole("alert").filter({ hasText: "HTTP 503" }).waitFor();
+  assert.equal(await page.locator(".cw-example-dialog").count(), 0);
   assert.equal(await dismissed(), null);
   assert.ok(await imageTask.isChecked());
   assert.equal(await videoPicker.inputValue(), configured.id);

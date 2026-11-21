@@ -127,7 +127,19 @@ try {
   await page.getByText(/服务器返回的是网页/).waitFor();
   assert.equal(await page.locator(".react-flow__node").count(), 0);
 
-  // 4. Browsing from setup leaves step two available until an example lands.
+  // 4. A single click in setup starts the video example on step two.
+  const videoPattern = "**/api/example-canvases/video-canvas/download";
+  const cancelledDownload = Promise.withResolvers();
+  let attempts = 0;
+  await page.route(videoPattern, async (route) => {
+    attempts += 1;
+    if (attempts === 1) {
+      await cancelledDownload.promise;
+      await route.abort().catch(() => {});
+      return;
+    }
+    await route.fulfill(served(attempts === 2 ? "text/html" : "application/octet-stream"));
+  });
   await page.evaluate(() => localStorage.removeItem("opendirector.modelSetup.v1"));
   await page.route("**/assistant/runtimes/default/status", (route) => route.fulfill({ json: {
     id: "default", label: "Default", group: "default", modelSource: "settings",
@@ -138,17 +150,28 @@ try {
   await welcome.getByRole("button", { name: "开始设置", exact: true }).click();
   await welcome.getByRole("button", { name: "配置语言模型", exact: true }).click();
   await welcome.getByRole("button", { name: /^fixture-agent/ }).click();
-  await welcome.getByRole("button", { name: "查看示例", exact: true }).click();
-  const imageExample = dialog.getByRole("listitem").filter({ hasText: "图像创作示例画布" });
-  await imageExample.getByRole("button", { name: "下载并导入", exact: true }).click();
-  await imageExample.getByText(/服务器返回的是网页/).waitFor();
+  const openSample = welcome.getByRole("button", { name: "打开示例画布", exact: true });
+  const videoTask = welcome.getByRole("checkbox", { name: "做一段视频" });
+  await videoTask.check();
+  const download = page.waitForRequest((request) => request.url().endsWith("/video-canvas/download"));
+  await openSample.click();
+  await download;
+  await welcome.getByRole("progressbar", { name: "下载进度" }).waitFor();
+  assert.equal(await dialog.count(), 0);
+  assert.match(await welcome.locator("[aria-current=step]").innerText(), /2\s*选择任务/);
+  await welcome.getByRole("button", { name: "取消下载", exact: true }).click();
+  cancelledDownload.resolve();
+  await welcome.getByRole("progressbar", { name: "下载进度" }).waitFor({ state: "hidden" });
+  assert.ok(await videoTask.isChecked());
+  await openSample.click();
+  await welcome.getByRole("alert").filter({ hasText: /服务器返回的是网页/ }).waitFor();
   assert.equal(await page.evaluate(() => localStorage.getItem("opendirector.modelSetup.v1")), null);
-  await page.unroute(samplePattern);
-  await page.route(samplePattern, (route) => route.fulfill(served()));
-  await imageExample.getByRole("button", { name: "重试", exact: true }).click();
-  await dialog.waitFor({ state: "hidden" });
+  assert.ok(await videoTask.isChecked());
+  await welcome.getByRole("button", { name: "重试", exact: true }).click();
   await welcome.waitFor({ state: "hidden" });
   await page.waitForFunction(() => document.querySelectorAll(".react-flow__node").length === 2);
+  assert.equal(attempts, 3);
+  assert.equal(await dialog.count(), 0);
   assert.equal(await page.evaluate(() => localStorage.getItem("opendirector.modelSetup.v1")), "dismissed");
 
   assert.deepEqual(errors, []);

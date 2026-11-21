@@ -17,12 +17,10 @@ function megabytes(bytes: number | undefined): string | null {
  */
 export function ExampleCanvasDialog({
   entries,
-  fromWelcome = false,
   onClose,
   onImport,
 }: {
   entries: ExampleEntry[];
-  fromWelcome?: boolean;
   onClose: () => void;
   onImport: (archive: Blob) => Promise<void>;
 }) {
@@ -38,33 +36,19 @@ export function ExampleCanvasDialog({
   }, []);
 
   const busy = entries.some((entry) => isRunning(entry.id));
-  const dismiss = () => {
-    const element = dialog.current;
-    if (!element?.open || busy) return;
-    element.close();
-    // A fading-out panel must leave keyboard navigation as soon as it closes.
-    element.inert = true;
-    onClose();
-  };
 
   return (
     <dialog
       ref={dialog}
       className="cw-example-dialog"
-      data-first-run={fromWelcome || undefined}
       aria-labelledby="cw-example-title"
-      onKeyDown={(event) => {
-        if (event.key !== "Escape" || event.defaultPrevented) return;
-        event.preventDefault();
-        dismiss();
-      }}
       onCancel={(event) => {
         // Escape must not orphan a running download.
         event.preventDefault();
-        dismiss();
+        if (!busy) onClose();
       }}
       onClick={(event) => {
-        if (event.target === event.currentTarget) dismiss();
+        if (event.target === event.currentTarget && !busy) onClose();
       }}
     >
       <header>
@@ -99,7 +83,7 @@ export function ExampleCanvasDialog({
                             : { value: status.received ?? 0, max: status.total ?? 1 })}
                         />
                       )}
-                      <span key={status.phase} role="status" aria-live="polite">
+                      <span role="status" aria-live="polite">
                         {status.phase === "importing"
                           ? t("canvas.example.state.importing")
                           : percent === null
@@ -115,7 +99,7 @@ export function ExampleCanvasDialog({
                       <span role="status" aria-live="polite">
                         {t("canvas.example.state.done", { title: status.title ?? entry.title[locale] })}
                       </span>
-                      <button type="button" onClick={dismiss}>
+                      <button type="button" onClick={onClose}>
                         {t("canvas.example.action.close")}
                       </button>
                     </>
@@ -152,7 +136,7 @@ export function ExampleCanvasDialog({
         </ul>
       )}
       <div className="cw-example-dialog-actions">
-        <button type="button" disabled={busy} onClick={dismiss}>
+        <button type="button" disabled={busy} onClick={onClose}>
           {t("canvas.example.action.close")}
         </button>
       </div>

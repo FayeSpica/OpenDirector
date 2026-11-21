@@ -16,6 +16,8 @@ import { CanvasIcon } from "./CanvasIcon";
 import { HarnessLogo } from "./HarnessLogo";
 import { firstRunCapabilities, firstRunModelIssue, firstRunModelKind, type FirstRunCapability, type FirstRunMedia, type FirstRunSelection } from "./firstRunModels";
 import { ModelServiceForm } from "./ModelServiceForm";
+import { exampleFailureText, examplePercent } from "./workspace/example/exampleFailure";
+import type { ExampleStatus } from "./workspace/example/useExampleImport";
 import "./settings.css";
 import "./welcome-screen.css";
 
@@ -70,12 +72,14 @@ function TaskOption({ capability, icon, title, description, checked, onChange }:
   );
 }
 
-export function WelcomeScreen({ catalog, projectId, onCreate, onImport, onExamples }: {
+export function WelcomeScreen({ catalog, projectId, onCreate, onImport, exampleStatus, onExamples, onCancelExample }: {
   catalog: BackendModels;
   projectId: string;
   onCreate: (selections: FirstRunSelection[]) => Promise<void>;
   onImport: (files: File[]) => Promise<void>;
+  exampleStatus?: ExampleStatus;
   onExamples: () => Promise<void>;
+  onCancelExample: () => void;
 }) {
   const { t, locale, setLocale } = useI18n();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -85,6 +89,8 @@ export function WelcomeScreen({ catalog, projectId, onCreate, onImport, onExampl
   const catalogRetryButton = useRef<HTMLButtonElement>(null);
   const focusAfterCatalogRetry = useRef(false);
   const filePicker = useRef<HTMLInputElement>(null);
+  const exampleButton = useRef<HTMLButtonElement>(null);
+  const focusAfterExample = useRef(false);
   const fieldGroup = useId();
   const [screen, setScreen] = useState<Screen>("intro");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
@@ -130,6 +136,8 @@ export function WelcomeScreen({ catalog, projectId, onCreate, onImport, onExampl
   const openEditors = selected.filter(({ task }) => task.type === "configure");
   const canUseCatalog = catalog.connected && !catalog.loading;
   const taskDisabled = !canUseCatalog || Boolean(taskAction) || lockedEditor !== null;
+  const downloadingExample = taskAction === "examples" && exampleStatus?.phase === "downloading";
+  const exampleProgress = downloadingExample ? examplePercent(exampleStatus) : null;
   const updateEditorLock = useCallback((capability: FirstRunCapability, locked: boolean) => {
     setLockedEditor((previous) => locked ? capability : previous === capability ? null : previous);
   }, []);
@@ -159,6 +167,12 @@ export function WelcomeScreen({ catalog, projectId, onCreate, onImport, onExampl
       (catalog.connected ? heading.current : catalogRetryButton.current)?.focus();
     }
   }, [catalog.loading, catalog.connected]);
+
+  useLayoutEffect(() => {
+    if (taskAction || !focusAfterExample.current) return;
+    focusAfterExample.current = false;
+    if (document.activeElement === document.body) exampleButton.current?.focus({ preventScroll: true });
+  }, [taskAction]);
 
   useEffect(() => {
     const input = filePicker.current;
@@ -256,6 +270,7 @@ export function WelcomeScreen({ catalog, projectId, onCreate, onImport, onExampl
       setTaskError(errorMessage(error));
     } finally {
       taskRunning.current = false;
+      if (action === "examples") focusAfterExample.current = true;
       setTaskAction(null);
     }
   }
@@ -371,6 +386,10 @@ export function WelcomeScreen({ catalog, projectId, onCreate, onImport, onExampl
     );
 
   function goBack() {
+    if (downloadingExample) {
+      onCancelExample();
+      return;
+    }
     if (savingNow.current || taskRunning.current || lockedEditor) return;
     const activeEditor = openEditors.find(({ capability }) =>
       cancelModelButtons.current.get(capability)?.form?.contains(document.activeElement),
@@ -510,6 +529,7 @@ export function WelcomeScreen({ catalog, projectId, onCreate, onImport, onExampl
                   ))}
                   {shortcutChoices.map((choice) => (
                     <button key={choice.id} type="button" className="cw-welcome-option cw-welcome-task-card is-compact"
+                      ref={choice.id === "examples" ? exampleButton : undefined}
                       aria-labelledby={`${fieldGroup}-${choice.id}`}
                       aria-describedby={`${fieldGroup}-${choice.id}-hint`}
                       onClick={() => {
@@ -536,8 +556,30 @@ export function WelcomeScreen({ catalog, projectId, onCreate, onImport, onExampl
                   else setImportReturns((count) => count + 1);
                 }} />
                 <p className="cw-welcome-feedback cw-welcome-task-feedback" role="status">
-                  {taskAction && <span key={taskAction} className="cw-welcome-pending">{t(taskProgressKeys[taskAction])}</span>}
+                  {taskAction && <span key={taskAction} className="cw-welcome-pending">
+                    {downloadingExample
+                      ? exampleProgress === null
+                        ? t("canvas.example.state.downloading")
+                        : t("canvas.example.state.downloadingPercent", { percent: exampleProgress })
+                      : taskAction === "examples" && exampleStatus?.phase === "importing"
+                        ? t("canvas.example.state.importing")
+                        : t(taskProgressKeys[taskAction])}
+                  </span>}
                 </p>
+                {downloadingExample && (
+                  <div className="cw-welcome-actions cw-welcome-example-controls">
+                    <progress className="cw-example-progress" aria-label={t("canvas.example.progress.label")}
+                      {...(exampleProgress === null ? {} : { value: exampleProgress, max: 100 })} />
+                    <button className="cw-welcome-secondary" onClick={onCancelExample}>{t("canvas.example.action.cancelDownload")}</button>
+                  </div>
+                )}
+                {!taskAction && exampleStatus?.phase === "failed" && (
+                  <div className="cw-welcome-actions cw-welcome-example-controls">
+                    <p className="cw-welcome-feedback" role="alert">{exampleFailureText(t, exampleStatus)}</p>
+                    <button className="cw-welcome-secondary" disabled={taskDisabled}
+                      onClick={() => void runTask("examples", onExamples)}>{t("canvas.example.action.retry")}</button>
+                  </div>
+                )}
                 {taskError && <p className="cw-welcome-feedback" role="alert">{taskError}</p>}
                 {selected.map(({ capability, task, ready, blocked, model }) => {
                   const modelLabel = t(`firstRun.capability.${capability}`);
