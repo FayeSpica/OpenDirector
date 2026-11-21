@@ -97,7 +97,8 @@ async def test_places_a_referenced_text_node_and_submits_once_with_lineage(proje
     gateway = generation_gateway(project, tools)
     request = {
         'kind': 'text', 'prompt': 'Write a two-sentence synopsis from these notes.',
-        'submit': True, 'references': [{'binding': 'follow_current', 'source': {'id': str(source.id)}}],
+        'submit': True, 'parameters': {'kind': 'text', 'maxTokens': 700},
+        'references': [{'binding': 'follow_current', 'source': {'id': str(source.id)}}],
     }
     try:
         result = await gateway.call('write-synopsis', 'create_generation_node', request)
@@ -111,7 +112,7 @@ async def test_places_a_referenced_text_node_and_submits_once_with_lineage(proje
         created = next(item for item in current.canvasItems if str(item.id) == result.value['itemId'])
         assert created.visible and created.position.x >= source.position.x + source.width
         spec = next(spec for spec in current.generationSpecs if str(spec.id) == result.value['specId'])
-        assert spec.modelConfigId == UUID(config['id'])
+        assert spec.modelConfigId == UUID(config['id']) and spec.parameters.maxTokens == 700
         [reference], [job] = current.references, current.jobs
         assert reference.source.id == source.id and reference.targetSpecId == spec.id
         assert job.inputSnapshot.references[0].asset.assetId == asset.id
@@ -139,9 +140,14 @@ async def test_reports_submission_failure_after_committing_the_new_node(project,
 
     if submit_raises:
         monkeypatch.setattr(runner, 'execute', failed_submit)
+    else:
+        def reject_provider_inputs(*args):
+            raise ProjectError('Provider inputs unavailable', 409)
+
+        monkeypatch.setattr(provider, 'prepare_inputs', reject_provider_inputs, raising=False)
     try:
         result = await gateway.call('partial', 'create_generation_node', {
-            'kind': 'text', 'prompt': 'Write a synopsis' if submit_raises else '', 'submit': True,
+            'kind': 'text', 'prompt': 'Write a synopsis', 'submit': True,
         })
         assert result.value['itemId'] == str(store.snapshot(pid).canvasItems[0].id)
         assert result.value['createReceipt']['status'] == 'applied'
@@ -154,6 +160,34 @@ async def test_reports_submission_failure_after_committing_the_new_node(project,
             assert submission['status'] == 'rejected' and submission['issues']
             assert result.error == submission['issues'][0]['message']
         assert not store.snapshot(pid).jobs and not provider.calls
+    finally:
+        await gateway.close()
+        await runner.close()
+
+
+@pytest.mark.anyio
+async def test_preflight_failure_leaves_no_node_before_a_corrected_attempt(project):
+    store, pid, _ = project
+    provider = Provider()
+    runner, tools, _ = stack(project, provider)
+    gateway = generation_gateway(project, tools)
+    request = {'kind': 'text', 'prompt': 'Write a synopsis', 'submit': True}
+    try:
+        conflicting = await gateway.call('conflicting-kind', 'create_generation_node', {
+            **request, 'parameters': {'kind': 'video'},
+        })
+        assert conflicting.error and not store.snapshot(pid).canvasItems
+        rejected = await gateway.call('missing-prompt', 'create_generation_node', {**request, 'prompt': ''})
+        assert rejected.error and rejected.value['createReceipt']['status'] == 'rejected'
+        assert 'itemId' not in rejected.value and not store.snapshot(pid).canvasItems
+
+        accepted = await gateway.call('corrected-input', 'create_generation_node', request)
+        assert accepted.value['status'] == 'accepted'
+        await settled(runner)
+        current = store.snapshot(pid)
+        [item], [job] = current.canvasItems, current.jobs
+        assert str(item.id) == accepted.value['itemId'] and job.originItemId == item.id
+        assert job.status == 'succeeded' and provider.calls == [str(job.id)]
     finally:
         await gateway.close()
         await runner.close()

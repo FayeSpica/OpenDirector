@@ -21,6 +21,8 @@ When work exposes a consequential risk or a recurring problem, add a lesson or u
 
 - **Reference merge follow-up:** Combining [#308](https://github.com/ThinkFlowLab/OpenDirector/pull/308) with #266 could merge cleanly while selecting capabilities from followed references and counting limits from followed plus pinned references. Use the same prepared reference list for both checks; verify pinned-only, mixed and duplicate-asset inputs after reopening. / **参考素材整合补充：** 能力选择和数量限制共用一次计算的请求素材，检查重开后的固定素材、混合素材及相同资产的去重；Git 自动合并成功不能证明两处使用相同输入。
 
+- **Agent composition follow-up:** [PR #426](https://github.com/ThinkFlowLab/OpenDirector/pull/426) found that general parameter types exposed values the selected connection could reject. Creating the node first could leave an extra item when the Agent retried by creating another. Check proposed node settings and references with the same rules as submission before publishing a composed create-and-submit node. Preserve the original item identity when a later submission fails. / **Agent 组合操作补充：** 通用参数类型可能包含所选连接不支持的值。对于组合创建并提交，先用共享提交规则检查拟创建节点的参数和引用。如果创建后提交仍失败，用原节点身份继续处理。
+
 ## Operations across boundaries can lose identity or context
 
 - **Trigger:** Importing a project, referencing assets across conversation turns, or switching projects during a run.

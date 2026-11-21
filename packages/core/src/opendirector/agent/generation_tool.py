@@ -1,7 +1,8 @@
 """Compose existing creation commands for one new generation node."""
 
 import asyncio
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Callable, Mapping
+from typing import Awaitable, Protocol
 from uuid import UUID, uuid5
 
 from pydantic import Field, JsonValue, TypeAdapter, ValidationError
@@ -22,7 +23,7 @@ class CreateGenerationNode(Contract):
     prompt: str = Field(max_length=PROMPT_MAX_LENGTH, description='Generation instruction, retaining the user’s content and constraints.')
     submit: bool = Field(strict=True, description='Set true only when the user asks to start generation now. Set false for setup only.')
     modelConfigId: UUID | None = Field(default=None, description='Existing model configuration ID when explicitly requested. Otherwise use the turn selection or the only configured model of this kind. A setup-only node can remain unbound.')
-    parameters: dict[str, JsonValue] | None = Field(default=None, description='Requested generation settings using existing parameter names and JSON types. Omit for defaults.')
+    parameters: dict[str, JsonValue] | None = Field(default=None, description='Only settings required by the request or the selected model. Omit other settings to use defaults. Put kind at the top level.')
     position: Point | None = Field(default=None, description='Canvas position if specifically requested. Omit to place next to existing nodes.')
     references: tuple[dict[str, JsonValue], ...] = Field(
         default=(), max_length=MAX_REFERENCES,
@@ -38,6 +39,10 @@ def generation_tool_schema() -> dict:
     return schema
 
 
+class ExecuteCommand(Protocol):
+    def __call__(self, call_id: str, command: dict, *, preflight_generation: bool = False) -> Awaitable[dict]: ...
+
+
 async def create_generation_node(
     arguments: dict[str, JsonValue],
     *,
@@ -47,7 +52,7 @@ async def create_generation_node(
     model_selections: Mapping[str, str | None],
     configs: ModelConfigs,
     snapshot: Callable[[UUID], ProjectSnapshot],
-    execute: Callable[[str, dict], Awaitable[dict]],
+    execute: ExecuteCommand,
 ) -> dict:
     request = CreateGenerationNode.model_validate(arguments)
     if any(ref.keys() & {'id', 'projectId', 'targetSpecId', 'revision'} for ref in request.references):
@@ -82,7 +87,11 @@ async def create_generation_node(
     spec = {'id': spec_key, 'projectId': project_key, 'kind': request.kind, 'purpose': 'generation',
             'prompt': request.prompt, 'modelConfigId': selected_id}
     if request.parameters is not None:
-        spec['parameters'] = request.parameters
+        parameters = dict(request.parameters)
+        if parameters.get('kind') == request.kind:
+            # A repeated discriminator carries the same intent as the outer kind.
+            parameters.pop('kind')
+        spec['parameters'] = parameters
     item = {'id': item_key, 'projectId': project_key, 'kind': request.kind, 'position': position.model_dump(mode='json'),
             'binding': {'role': 'generation', 'objectRef': {'id': spec_key}}}
     references = [
@@ -93,7 +102,7 @@ async def create_generation_node(
     create_receipt = CommandReceipt.model_validate(await execute(f'create-generation-node:{operation_id}', {
         'type': 'canvas.createGeneration',
         'payload': {'spec': spec, 'item': item, 'references': references},
-    }))
+    }, preflight_generation=request.submit))
     result = {'status': create_receipt.status, 'createReceipt': create_receipt.model_dump(mode='json')}
     if create_receipt.status == 'rejected':
         return {**result, 'issues': result['createReceipt']['issues']}

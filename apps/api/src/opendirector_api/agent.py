@@ -19,6 +19,7 @@ from opendirector.domain.creation.base import agent_command_id
 from opendirector.agent.citations import referenced_sources, with_trace_sources
 from opendirector.agent.runtime import AgentRuntimes, runtime_available, configured_runtimes, runtime_spec, runtime_catalog, runtime_status
 from opendirector.agent.skills import skills
+from opendirector.agent.tools import model_parameter_choices
 from opendirector.domain.projects import ProjectError
 from opendirector.application.model_availability import requests_for
 from opendirector.domain.rule_facts import MAX_REFERENCES, PROMPT_MAX_LENGTH
@@ -471,9 +472,14 @@ def agent_routes(projects, generation, configs, provider=None, *, active=None) -
             model = config['modelId'] if config else value.runtimeModel
             model_is_cli_default = spec.modelSource == 'cli' and not model
             model_selections = dict(value.modelSelections)
-            model_names = {row['id']: row['modelId'] for row in configs.list()}
-            preferences = {kind: {'modelConfigId': model_id, 'modelName': model_names.get(model_id)}
+            model_rows = {row['id']: row for row in configs.list()}
+            preferences = {kind: {'modelConfigId': model_id, 'modelName': model_rows.get(model_id, {}).get('modelId')}
                 for kind, model_id in model_selections.items() if model_id}
+            if value.runtime == 'default':
+                for preference in preferences.values():
+                    row = model_rows.get(preference['modelConfigId'])
+                    if row and (choices := model_parameter_choices(row)):
+                        preference['supportedParameterValues'] = choices
             events = RunEvents()
             def validate_connection():
                 if config is not None:

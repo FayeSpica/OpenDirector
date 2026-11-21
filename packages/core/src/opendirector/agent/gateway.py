@@ -77,8 +77,9 @@ class ToolGateway:
                 if name == 'create_generation_node':
                     from opendirector.agent.generation_tool import create_generation_node
 
-                    async def execute_command(inner_id, command):
-                        return await self.invoke(inner_id, 'execute_command', command)
+                    async def execute_command(inner_id, command, *, preflight_generation=False):
+                        return await self.invoke(inner_id, 'execute_command', command,
+                                                 preflight_generation=preflight_generation)
 
                     value = await create_generation_node(
                         arguments, project_id=self.run.project_id, turn_id=self.run.turn_id, call_id=call_id,
@@ -112,10 +113,10 @@ class ToolGateway:
                     details['code'] = failure.code
                 return ToolResult(value=details, error=str(failure))
 
-    async def invoke(self, call_id: str, name: str, arguments: dict[str, JsonValue]) -> JsonValue:
+    async def invoke(self, call_id: str, name: str, arguments: dict[str, JsonValue], **options) -> JsonValue:
         return await self.business.execute(self.run.project_id, self.run.turn_id, self.run.session,
             call_id, name, arguments, self.roots, self.run.config,
-            self.run.runtime if self.run.config is None else None, self.execution_directory)
+            self.run.runtime if self.run.config is None else None, self.execution_directory, **options)
 
     async def close(self) -> None:
         self.closed = True

@@ -20,7 +20,7 @@ from opendirector.agent.citations import search_sources
 from opendirector.agent.gateway import ToolGateway
 from opendirector.agent.mcp_transport import TurnMcp
 from opendirector.agent.process import terminate
-from opendirector.agent.tools import ROOT, SYSTEM
+from opendirector.agent.tools import ROOT, STRUCTURED_SYSTEM, SYSTEM
 from opendirector.installation import BUNDLED
 from opendirector.agent.skill_snapshot import prepare_skills
 from opendirector.agent.directory_links import link_directory, unlink_directory
@@ -117,15 +117,7 @@ def command(runtime: str, work: Path, socket: str, token: str, model: str | None
                 config['mcp']['opendirector'] = {'type': 'remote', 'url': mcp_url, 'oauth': False,
                                                 'headers': {'Authorization': f'Bearer {token}'}, 'timeout': 180000}
                 config['permission']['opendirector_*'] = 'allow'
-                config['agent']['opendirector']['prompt'] += (
-                    '\nUse the available opendirector_* structured tools first for project operations. '
-                    'For any new generation request whose inputs are already known, call '
-                    'opendirector_create_generation_node directly. Set submit=true only when the user asks to generate now. '
-                    'This tool resolves project context and model selection without a preceding project read or availability refresh. '
-                    'For new content, call tools that resolve their own project context directly. '
-                    'Before changing an existing object, read its current ID and revision with the structured tools. '
-                    'Apply the CLI discovery and project-show instructions only when using the CLI. '
-                    'Use the shell for local files and media, or for project CLI operations if the structured tools are unavailable.')
+                config['agent']['opendirector']['prompt'] = STRUCTURED_SYSTEM
                 for key in ('NO_PROXY', 'no_proxy'):
                     env[key] = ','.join(filter(None, [env.get(key), '127.0.0.1']))
         env.update(OPENCODE_DISABLE_EXTERNAL_SKILLS='1', OPENCODE_DISABLE_CLAUDE_CODE_SKILLS='1', OPENCODE_CONFIG_CONTENT=json.dumps(config))

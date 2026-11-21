@@ -1,8 +1,8 @@
 # Agent image latency / Agent 单图交互耗时
 
-The manual browser benchmark sends ordinary English and Chinese single-image requests on a fresh canvas and on a canvas with an imported image. Run both prompt sets. The browser checks that the current turn created exactly one real image node and one job, that the adopted preview has the stored asset's bytes, and that pre-existing nodes and assets are preserved.
+The manual browser benchmark sends ordinary English and Chinese single-image requests on a fresh canvas and on a canvas with an imported image. Run both prompt sets. The browser checks that the current turn created exactly one real image node and one job, that the adopted preview has the stored asset's bytes, and that pre-existing nodes and assets are preserved. Ordinary prompts leave output size and encoding open. The browser compares the decoded dimensions with the saved asset and job's technical check and logs the executed settings.
 
-手动浏览器基准在空画布和已有导入图片的画布上发送中英文单图请求。运行两组不同措辞。浏览器核对本轮只创建一个真实图片节点和一个任务，采纳后预览与保存的素材字节一致，已有节点和素材保留。
+手动浏览器基准在空画布和已有导入图片的画布上发送中英文单图请求。运行两组不同措辞。浏览器核对本轮只创建一个真实图片节点和一个任务，采纳后预览与保存的素材字节一致，已有节点和素材保留。普通请求未指定尺寸和编码。浏览器核对解码尺寸与素材、任务技术检查记录一致，并记录实际执行参数。
 
 - Count samples within the [3-second interaction budget](ui-performance.md#interaction-budgets) from Send to the new node's first visible frame. Report the time from the same click to the decoded result appearing in the node separately.
 - 按[交互预算](ui-performance.md#interaction-budgets)统计从点击发送到新节点首次可见不超过 3 秒的样本。成图耗时从同一次点击到已解码图片在节点内可见，单独报告。
@@ -30,9 +30,9 @@ node tests/browser/agent_image_ordinary.mjs
 AGENT_IMAGE_PARAPHRASES=1 node tests/browser/agent_image_ordinary.mjs
 ```
 
-To compare shared Agent runtime changes on the same input, run `AGENT_IMAGE_CASE=fixed AGENT_IMAGE_RUNS=5 node tests/browser/agent_image_ordinary.mjs`. This repeats the fixed 2048×2048 PNG request on a fresh canvas and checks the exact saved generation prompt in addition to the node, job, and asset checks.
+To compare shared Agent runtime changes on the same input, run `AGENT_IMAGE_CASE=fixed AGENT_IMAGE_RUNS=5 node tests/browser/agent_image_ordinary.mjs`. This repeats the fixed 2048×2048 PNG request on a fresh canvas and checks the exact saved generation prompt, decoded size, and PNG encoding in addition to the node, job, and asset checks.
 
-对比共享 Agent 运行时改动时，可用 `AGENT_IMAGE_CASE=fixed AGENT_IMAGE_RUNS=5 node tests/browser/agent_image_ordinary.mjs` 在空画布上重复发送同一条 2048×2048 PNG 请求。脚本同时校验保存的生图提示词、节点、任务和素材。
+对比共享 Agent 运行时改动时，可用 `AGENT_IMAGE_CASE=fixed AGENT_IMAGE_RUNS=5 node tests/browser/agent_image_ordinary.mjs` 在空画布上重复发送同一条 2048×2048 PNG 请求。脚本校验保存的生图提示词、解码尺寸和 PNG 编码，同时核对节点、任务和素材。
 
 The runner emits raw samples and per-case summaries as JSON Lines. Check `withinBudget` alongside successful generation and the two duration metrics.
 

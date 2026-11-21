@@ -324,6 +324,32 @@ class CreationGeneration(GenerationRuntime):
                 remote.release()
             claim.release()
 
+    def _validated_inputs(self, snapshot, spec):
+        config = self.configs.resolve(str(spec.modelConfigId), 'agent' if spec.kind == 'text' else spec.kind)
+        public = ModelConfigPublic.model_validate({key: value for key, value in config.items() if key != 'apiKey'} |
+            {'inputRules': self.availability.effective_input_rules(config)})
+        spec, resolved = current_generation_inputs(snapshot, spec, public.inputRules)
+        spec = execution_spec(spec, resolved, public.inputRules)
+        try:
+            validate_generation(spec, public, resolved, submitting=True)
+        except (ValueError, ProjectError) as error:
+            raise ContractError.from_error(error, spec.id) from error
+        return spec, resolved, config, public
+
+    def create_generation_node(self, create_command, *, session=None, source='ui'):
+        """Create a proposed node only if it passes the shared generation input checks."""
+        if create_command.type != 'canvas.createGeneration':
+            raise ProjectError('无效的创建生成节点命令。')
+        canvas = CreationCanvas(self.projects)
+
+        def apply(before):
+            proposed = canvas.apply(before, create_command)
+            spec = next(item for item in proposed.generationSpecs if item.id == create_command.payload.spec.id)
+            self._validated_inputs(proposed, spec)
+            return proposed
+
+        return self.projects.commit(create_command, apply, session=session, source=source)
+
     def prepare(self, command, *, session=None, source='ui', agent_origin=None):
         replay = self.projects.replay(command)
         if replay is not None:
@@ -382,12 +408,8 @@ class CreationGeneration(GenerationRuntime):
                 spec_data['revision'] += 1
             intermediate = ProjectSnapshot.model_validate(data)
             spec = next(s for s in intermediate.generationSpecs if s.id == old.id)
-            config = self.configs.resolve(str(spec.modelConfigId), 'agent' if spec.kind == 'text' else spec.kind)
-            public = ModelConfigPublic.model_validate({key: value for key, value in config.items() if key != 'apiKey'} | {'inputRules': self.availability.effective_input_rules(config)})
-            spec, resolved = current_generation_inputs(intermediate, spec, public.inputRules)
-            spec = execution_spec(spec, resolved, public.inputRules)
+            spec, resolved, config, public = self._validated_inputs(intermediate, spec)
             try:
-                validate_generation(spec, public, resolved, submitting=True)
                 if spec.kind == 'audio' and spec.parameters.creationType == 'audio':
                     if old != voice_spec or config != voice_config:
                         raise ContractError('revision_conflict', '音色验证期间生成配置或模型服务已变化，请重新提交。', spec.id)

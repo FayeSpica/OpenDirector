@@ -31,13 +31,13 @@ const cases = [
 const fixedImagePrompt = "A red ceramic mug on a pale blue table in soft window light.";
 const fixedCase = {
   id: "fixed", locale: "en-US", populated: false, imagePrompt: fixedImagePrompt,
+  expectedSize: "2048x2048", expectedFormat: "png",
   prompt: `Generate one image on the canvas. Set the generation size to 2048x2048 and output format to PNG. Use this exact image prompt: "${fixedImagePrompt}" Keep the image visible on the canvas.`,
 };
 const caseId = process.env.AGENT_IMAGE_CASE;
 const selectedCases = caseId ? [...cases, fixedCase].filter((entry) => entry.id === caseId) : cases;
 assert.ok(selectedCases.length, `Unknown AGENT_IMAGE_CASE: ${caseId}`);
 const firstCanvasBudgetMs = 3_000;
-const size = "2048x2048";
 const web = loopback(process.env.CREATION_WEB_URL ?? "http://127.0.0.1:5179");
 const api = loopback(process.env.CREATION_API_URL ?? "http://127.0.0.1:8019");
 const runs = count("AGENT_IMAGE_RUNS", 1, 1);
@@ -182,7 +182,7 @@ function measureOnClick(button, { timeout, existingIds }) {
   }, { capture: true, once: true });
 }
 
-async function verify(project, prompt, before, timing, previewDigest, exactImagePrompt) {
+async function verify(project, prompt, before, timing, previewDigest, { imagePrompt, expectedSize, expectedFormat }) {
   const deadline = performance.now() + timeout;
   let conversation;
   do {
@@ -219,20 +219,30 @@ async function verify(project, prompt, before, timing, previewDigest, exactImage
   assert.equal(job.inputSnapshot.spec.kind, "image");
   assert.equal(job.inputSnapshot.spec.modelConfigId, image.id);
   const generationPrompt = job.inputSnapshot.spec.prompt;
-  if (exactImagePrompt) assert.equal(generationPrompt, exactImagePrompt);
+  if (imagePrompt) assert.equal(generationPrompt, imagePrompt);
   assert.match(generationPrompt, /mug|cup|[杯盃]/iu, "Job must preserve the requested subject");
   assert.match(generationPrompt, /red|红|紅/iu, "Job must preserve the requested mug color");
   assert.match(generationPrompt, /blue|蓝|藍/iu, "Job must preserve the requested table color");
   assert.deepEqual(job.inputSnapshot.references, []);
-  assert.equal(job.execution.size, size);
-  assert.equal(job.execution.outputFormat, "png");
-  assert.equal(`${timing.width}x${timing.height}`, size);
+  assert.equal(job.execution.kind, "image");
+  if (expectedSize) {
+    assert.equal(job.execution.size, expectedSize);
+    assert.equal(`${timing.width}x${timing.height}`, expectedSize);
+  }
+  if (expectedFormat) assert.equal(job.execution.outputFormat, expectedFormat);
   const asset = snapshot.assets.find((entry) => entry.id === job.asset.assetId);
   assert.equal(asset?.kind, "image");
+  assert.equal(asset.fingerprint, job.asset.fingerprint, "The asset must match the job output version");
+  const { width, height, mimeType } = asset.metadata;
+  const facts = job.technicalCheck.facts;
+  assert.deepEqual([timing.width, timing.height], [width, height], "Displayed dimensions must match the stored asset");
+  assert.deepEqual([facts.width, facts.height], [width, height], "Technical check dimensions must match the stored asset");
+  assert.equal(facts.type, mimeType);
+  assert.match(mimeType, /^image\//);
+  if (expectedFormat) assert.equal(mimeType, `image/${expectedFormat}`);
   for (const old of before.canvasItems) {
     const current = snapshot.canvasItems.find((item) => item.id === old.id);
-    assert.ok(current, "The existing image node must survive the request");
-    for (const field of ["kind", "visible", "binding", "position"]) assert.deepEqual(current[field], old[field]);
+    assert.deepEqual(current, old, "The existing image node must be preserved");
   }
   for (const old of before.assets) {
     const current = snapshot.assets.find((entry) => entry.id === old.id);
@@ -252,14 +262,14 @@ async function verify(project, prompt, before, timing, previewDigest, exactImage
   const displayed = node.binding.materialOverride ?? result?.asset ?? node.binding.objectRef;
   assert.equal(displayed.assetId, asset.id, "Saved canvas must display the job output");
   const response = await request(`${project}/assets/${asset.id}/content`);
-  assert.match(response.headers.get("content-type"), /^image\//);
+  assert.equal(response.headers.get("content-type"), mimeType);
   const bytes = Buffer.from(await response.arrayBuffer());
   assert.ok(bytes.length > 0);
   assert.equal(asset.fingerprint, `sha256:${createHash("sha256").update(bytes).digest("hex")}`);
   assert.equal(previewDigest, asset.fingerprint, "The rendered preview must contain the job output bytes");
   return {
     turnId: user.id, jobId: job.id, assetId: asset.id, jobCreatedAt: job.createdAt,
-    execution: job.execution, adapterParameters: job.adapterParameters, generationPrompt,
+    execution: job.execution, adapterParameters: job.adapterParameters, generationPrompt, mimeType,
   };
 }
 
@@ -331,7 +341,7 @@ async function run(browser, scenario, sample, warmup) {
       const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
       return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
     });
-    const ids = await verify(project, prompt, before, timing, previewDigest, scenario.imagePrompt);
+    const ids = await verify(project, prompt, before, timing, previewDigest, scenario);
     assert.deepEqual(errors, []);
     return { sample, warmup, projectId, existingIds, ...ids, ...timing,
       withinBudget: timing.firstCanvasMs <= firstCanvasBudgetMs };
