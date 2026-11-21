@@ -19,6 +19,8 @@ OpenDirector is an AI video creation workspace that runs locally and is accessed
 
 Use it to explore visual ideas, refine assets, and make short films. Projects stay on your machine; generation uses the provider APIs or self-hosted model services you choose.
 
+[Official website](https://thinkflowlab.github.io/OpenDirector/) · [Download for macOS or Windows](https://thinkflowlab.github.io/OpenDirector/#download) · [Watch the example film](https://thinkflowlab.github.io/OpenDirector/#film) · [Installation guide](docs/guides/installation.md)
+
 [News](#news) · [Example film](#example-film-we-can-still-win) · [Quick start](#quick-start) · [Documentation](#documentation) · [Community](#community) · [Contributing](#contributing)
 
 ## News
@@ -53,6 +55,10 @@ https://github.com/user-attachments/assets/11babc03-e35c-40e7-b5f6-7d476b6bf11a
 [Download the original film (MP4, 15.7 MiB)](docs/guides/assets/dota2-short-film.mp4?raw=true) · 60 seconds · 1280 × 720 · 24 fps · Music: 《岁月神偷》.
 
 ## Quick start
+
+### Install the desktop app
+
+[Download the installer](https://thinkflowlab.github.io/OpenDirector/#download) for macOS (Apple Silicon) or Windows (x64). Install and open OpenDirector.
 
 ### Install with AI
 
