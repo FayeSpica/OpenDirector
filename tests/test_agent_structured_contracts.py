@@ -34,3 +34,14 @@ def test_native_generation_tool_advertises_all_media_parameter_contracts():
     assert parameter_types == fields.keys()
     for name, field in fields.items():
         assert field in definitions[name]['properties']
+
+
+def test_batched_contract_keeps_the_selected_connections_choices():
+    model = {'kind': 'video', 'inputRules': {'videoModes': ['reference'], 'generateAudioOptions': [False]}}
+    contract = compact_command_contract('canvas.createGeneration', 'video', model)
+    definitions = contract['$defs']
+    settings = definitions['VideoParameters']
+    assert settings['properties']['videoMode']['enum'] == ['reference']
+    assert settings['properties']['generateAudio']['enum'] == [False]
+    assert {'videoMode', 'generateAudio'} <= set(settings['required'])
+    assert 'parameters' in definitions['VideoGenerationSpec']['required']

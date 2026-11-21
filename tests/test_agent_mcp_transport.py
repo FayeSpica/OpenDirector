@@ -9,6 +9,7 @@ import pytest
 
 from opendirector.agent.gateway import ToolResult
 from opendirector.agent.mcp_transport import TurnMcp
+from opendirector.agent.tools import structured_tools
 
 
 @pytest.fixture
@@ -86,4 +87,20 @@ async def test_mcp_teardown_does_not_wait_for_peer_to_read_result():
         writer.transport.abort()
         with suppress(OSError):
             await writer.wait_closed()
+        await mcp.close()
+
+
+@pytest.mark.anyio
+async def test_mcp_advertises_batched_command_lookup():
+    gateway = SimpleNamespace(catalog=structured_tools())
+    mcp = TurnMcp(gateway, asyncio.Queue(), 'turn-secret')
+    url = await mcp.start()
+    try:
+        async with httpx.AsyncClient(trust_env=False) as client:
+            response = await client.post(url, json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'},
+                                         headers={'Authorization': 'Bearer turn-secret'})
+        advertised = {tool['name']: tool for tool in response.json()['result']['tools']}
+        assert 'command_schema' not in advertised
+        assert {'contracts', 'modelConfigId'} <= advertised['read_project']['inputSchema']['properties'].keys()
+    finally:
         await mcp.close()

@@ -237,9 +237,11 @@ def command_help(schema: dict, path: str, project_id: UUID) -> dict:
     return result
 
 
-def compact_command_contract(command: str, kind: str | None) -> dict:
+def compact_command_contract(command: str, kind: str | None, model: dict | None = None) -> dict:
     """Return the reachable command schema for a native structured call."""
     schema = COMMANDS[command].model_json_schema()
+    if model is not None:
+        apply_model_parameter_choices(schema, model)
     definitions = schema.pop('$defs', {})
     if command == 'creation.batch':
         restrict_batch_schema(definitions)
@@ -279,6 +281,7 @@ def tools() -> list[dict]:
                          {'type': 'object', 'properties': {
                              'contracts': {'type': 'array', 'items': {'type': 'string', 'enum': list(COMMANDS)}, 'maxItems': 8},
                              'kind': {'type': 'string', 'enum': ['text', 'image', 'video', 'audio']},
+                             'modelConfigId': {'type': 'string', 'format': 'uuid', 'description': 'Optional connection for model-specific command parameter choices.'},
                          }, 'additionalProperties': False}),
               tool_schema('read', 'Read a discovered skill file/resource, or text asset via asset:<UUID>. No scripts.',
                          {'type': 'object', 'properties': {'path': {'type': 'string'}}, 'required': ['path'], 'additionalProperties': False})]
@@ -344,6 +347,23 @@ def model_parameter_choices(model: dict) -> dict[str, list]:
     return {}
 
 
+def apply_model_parameter_choices(schema: dict, model: dict) -> None:
+    prefix = ('text' if model['kind'] == 'agent' else model['kind']).capitalize()
+    definitions = schema.get('$defs', {})
+    parameters = definitions.get(f'{prefix}Parameters')
+    if not parameters:
+        return
+    for field, choices in model_parameter_choices(model).items():
+        prop = parameters['properties'][field]
+        prop['enum'] = choices
+        if prop.get('default') not in choices:
+            prop.pop('default', None)
+            parameters.setdefault('required', []).append(field)
+            definition = definitions[f'{prefix}GenerationSpec']
+            if 'parameters' not in definition.get('required', []):
+                definition.setdefault('required', []).append('parameters')
+
+
 def structured_tools() -> list[dict]:
     from opendirector.agent.generation_tool import CreateGenerationNode, generation_tool_schema
 
@@ -352,14 +372,13 @@ def structured_tools() -> list[dict]:
     descriptions = {
         'read_project': (
             'Read the current project, model preferences, and complete command schemas together. '
-            'Include the commands you need in contracts and set kind for a single media kind. '
+            'Include all unfamiliar command types in contracts. Set kind for one media kind, or modelConfigId for a specific connection. '
             'For a new visible generation item with self-contained inputs, create_generation_node resolves its own context. '
             'When contracts are requested, newIds contains fresh UUIDs for new objects. '
             'Use existing object IDs and revisions only from this snapshot or command receipts. '
             'Model rows already include availability.'
         ),
         'model_availability': 'Inspect detailed model availability only when the user asks or a command reports an availability issue.',
-        'command_schema': 'Inspect a command field if the complete contract from read_project needs clarification.',
         'execute_command': (
             'Execute a project command using the complete contract from read_project. '
             'Only the outer projectId and commandId are supplied by the host. '
@@ -427,7 +446,17 @@ class AgentTools:
             kind = arguments.get('kind')
             if len(contracts) > 8 or set(contracts) - COMMANDS.keys() or kind not in (None, 'text', 'image', 'video', 'audio'):
                 raise ProjectError('Invalid command contract selection.')
-            return {**context, 'contracts': {command: compact_command_contract(command, kind) for command in dict.fromkeys(contracts)},
+            model = None
+            if 'modelConfigId' in arguments:
+                model_id = str(TypeAdapter(UUID).validate_python(arguments['modelConfigId']))
+                model = next((row for row in models if row['id'] == model_id), None)
+                if model is None:
+                    raise ProjectError('所选模型不可用。')
+                model_kind = 'text' if model['kind'] == 'agent' else model['kind']
+                if kind is not None and kind != model_kind:
+                    raise ProjectError('所选模型不存在或类别不符，请在设置中配置并重新选择。')
+                kind = model_kind
+            return {**context, 'contracts': {command: compact_command_contract(command, kind, model) for command in dict.fromkeys(contracts)},
                     'newIds': [str(uuid4()) for _ in range(4)] if contracts else []}
         if name == 'model_availability':
             refresh = TypeAdapter(bool).validate_python(arguments.get('refresh', False), strict=True)
@@ -504,18 +533,7 @@ class AgentTools:
                         for child in value:
                             narrow(child)
                 narrow(schema)
-                prefix = media_kind.capitalize()
-                parameters = schema.get('$defs', {}).get(f'{prefix}Parameters')
-                if parameters:
-                    for field, choices in model_parameter_choices(config).items():
-                        prop = parameters['properties'][field]
-                        prop['enum'] = choices
-                        if prop.get('default') not in choices:
-                            prop.pop('default', None)
-                            parameters.setdefault('required', []).append(field)
-                            spec = schema['$defs'][f'{prefix}GenerationSpec']
-                            if 'parameters' not in spec.get('required', []):
-                                spec.setdefault('required', []).append('parameters')
+                apply_model_parameter_choices(schema, config)
             path = TypeAdapter(str).validate_python(arguments.get('path', ''), strict=True)
             return command_help(schema, path, project_id)
         if name != 'execute_command':

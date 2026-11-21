@@ -112,7 +112,9 @@ def command(runtime: str, work: Path, socket: str, token: str, model: str | None
             config['provider'] = {'opendirector': {'npm': '@ai-sdk/openai-compatible', 'name': 'OpenDirector',
                 'options': {'baseURL': model_url, 'apiKey': '{env:OPENDIRECTOR_MODEL_KEY}'},
                 'models': {model: {'name': model, 'modalities': {'input': input_modalities or ['text'], 'output': ['text']}}}}}
-            env.update(XDG_CONFIG_HOME=str(work), OPENDIRECTOR_MODEL_KEY=token)
+            # The pinned engine installs its own dependencies here on first use.
+            # Keep them out of the media worktree and its native Git snapshots.
+            env.update(XDG_CONFIG_HOME=str(Path(socket).parent), OPENDIRECTOR_MODEL_KEY=token)
             if mcp_url:
                 config['mcp']['opendirector'] = {'type': 'remote', 'url': mcp_url, 'oauth': False,
                                                 'headers': {'Authorization': f'Bearer {token}'}, 'timeout': 180000}

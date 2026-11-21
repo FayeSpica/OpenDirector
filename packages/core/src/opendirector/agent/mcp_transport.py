@@ -124,7 +124,7 @@ class TurnMcp:
             result = {'tools': [
                 {'name': function['name'], 'description': function['description'],
                  'inputSchema': function['parameters']}
-                for function in functions
+                for function in functions if function['name'] != 'command_schema'
             ]}
         elif method == 'tools/call':
             name = params.get('name')
