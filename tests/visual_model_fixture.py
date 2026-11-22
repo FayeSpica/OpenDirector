@@ -25,6 +25,23 @@ def image_bytes(value):
                 yield from image_bytes(part)
 
 
+def latest_tool_output(messages):
+    for message in reversed(messages):
+        if message.get('type') == 'function_call_output':
+            return str(message['output'])[:1500]
+        if message.get('role') == 'tool':
+            return str(message['content'])[:1500]
+        content = message.get('content')
+        if isinstance(content, list):
+            for part in reversed(content):
+                if part.get('type') == 'tool_result':
+                    result = part.get('content', '')
+                    if isinstance(result, list):
+                        result = ' '.join(item.get('text', '') for item in result if isinstance(item, dict))
+                    return str(result)[:1500]
+    return '(no native tool result)'
+
+
 def stream_events(events):
     return b''.join(
         f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode()

@@ -102,14 +102,6 @@ jobs:
       - name: Check generated contracts
         if: always() && steps.install.outcome == 'success'
         run: python scripts/generate_contracts.py --check
-      - name: Python tests
-        if: always() && steps.install.outcome == 'success'
-        env:
-          PYTEST_MARK_EXPRESSION: ${{ inputs.python-mark-expression }}
-        run: python -m pytest tests -q -ra -m "$PYTEST_MARK_EXPRESSION" --durations=50 --junitxml=test-results/python.xml --ci-profile=test-results/python.json
-      - name: Check full layer inventory / 核对完整分层清单
-        if: always() && steps.install.outcome == 'success' && inputs.python-mark-expression == ''
-        run: python scripts/ci/check_test_layers.py --profile test-results/python.json --require-executed
       - name: Bundled OpenCode model gateway regression
         if: always() && steps.install.outcome == 'success'
         timeout-minutes: 5
@@ -133,7 +125,18 @@ jobs:
         timeout-minutes: 10
         env:
           OPENDIRECTOR_HARNESS_CI: '1'
-        run: python -m pytest tests/test_agent_visual_gate.py::test_harness_native_visual_input -q -ra --junitxml=test-results/harness-visual.xml --ci-profile=test-results/harness-visual.json
+        run: >-
+          python -m pytest tests/test_agent_visual_gate.py::test_harness_native_visual_input -q -ra
+          --basetemp "$RUNNER_TEMP/harness-visual-pytest"
+          --junitxml=test-results/harness-visual.xml --ci-profile=test-results/harness-visual.json
+      - name: Python tests
+        if: always() && steps.install.outcome == 'success'
+        env:
+          PYTEST_MARK_EXPRESSION: ${{ inputs.python-mark-expression }}
+        run: python -m pytest tests -q -ra -m "$PYTEST_MARK_EXPRESSION" --durations=50 --junitxml=test-results/python.xml --ci-profile=test-results/python.json
+      - name: Check full layer inventory / 核对完整分层清单
+        if: always() && steps.install.outcome == 'success' && inputs.python-mark-expression == ''
+        run: python scripts/ci/check_test_layers.py --profile test-results/python.json --require-executed
       - name: Upload Python timing evidence / 上传 Python 耗时证据
         if: always() && steps.install.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

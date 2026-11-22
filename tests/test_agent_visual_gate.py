@@ -22,7 +22,7 @@ from opendirector.infrastructure.model_configs import ModelConfigs
 from opendirector.integrations.chat_completions import ChatCompletions
 from opendirector_api.main import create_app
 from test_native_runtime import real_opencode_worker
-from visual_model_fixture import anthropic_stream, image_bytes, responses_stream, serve_model
+from visual_model_fixture import anthropic_stream, image_bytes, latest_tool_output, responses_stream, serve_model
 
 
 COLORS = {'red': (240, 20, 20), 'blue': (20, 20, 240),
@@ -70,8 +70,8 @@ def prepare_project(client, still, clip):
 
 
 def shell_extract(source, output):
-    args = ['ffmpeg', '-v', 'error', '-nostdin', '-ss', '1.5', '-i', str(source),
-            '-frames:v', '1', str(output)]
+    args = ['ffmpeg', '-v', 'error', '-nostdin', '-threads', '1', '-filter_threads', '1',
+            '-ss', '1.5', '-i', str(source), '-frames:v', '1', '-threads:v', '1', str(output)]
     return subprocess.list2cmdline(args) if os.name == 'nt' else shlex.join(args)
 
 
@@ -247,6 +247,8 @@ def test_harness_native_visual_input(runtime, tmp_path, monkeypatch, bounded_run
                     assert all(asset_id in serialized for asset_id in assets.values())
                 expected, call = steps[stage]
                 visual_input = payload['input'] if protocol == 'responses' else payload['messages']
+                if call and str(frame) in call[1].values():
+                    assert frame.is_file(), 'FFmpeg output missing. Native tool result: ' + latest_tool_output(visual_input)
                 actual = transmitted_pixels(visual_input)
                 assert actual == expected, f'{runtime} request {stage}: pixels {actual}, expected {expected}'
                 if call is not None:
@@ -276,6 +278,7 @@ def test_harness_native_visual_input(runtime, tmp_path, monkeypatch, bounded_run
             base, assets = prepare_project(client, still, clip)
             directory = local.root / 'Visual input gate'
             work = directory / 'agent-runs' / turn / 'work'
+            frame = work / 'gate-frame.png'
             paths = {asset['kind']: directory / asset['path'] for asset in client.get(base).json()['assets']}
             steps = visual_steps(runtime, paths['image'], paths['video'], work)
             try:
@@ -285,7 +288,7 @@ def test_harness_native_visual_input(runtime, tmp_path, monkeypatch, bounded_run
                 assert not failures, failures
             assert observed == reply
             assert stage == len(steps)
-            with Image.open(work / 'gate-frame.png') as image:
+            with Image.open(frame) as image:
                 assert half_colors(image) == FRAME
             snapshot = client.get(base).json()
             assert {item['id'] for item in snapshot['assets']} == set(assets.values())
