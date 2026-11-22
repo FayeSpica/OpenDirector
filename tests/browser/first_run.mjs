@@ -49,7 +49,6 @@ try {
   let blockedImage;
   await page.route(/\/api\/model-configs$/, async (route) => {
     if (failCatalog) {
-      failCatalog = false;
       await route.fulfill({ status: 503, json: {} });
       return;
     }
@@ -88,6 +87,8 @@ try {
   await page.goto(`${url}?setup=welcome&from=onboarding`);
   await welcomeTitle.waitFor();
   await welcome.getByRole("alert").getByText("Could not read model configuration. Try again.").waitFor();
+  // The dev build can read the catalog twice before the user retries.
+  failCatalog = false;
   await welcome.getByRole("button", { name: "Reload", exact: true }).click();
   await welcome.getByRole("alert").waitFor({ state: "hidden" });
   await welcome.getByText("Loading model configuration…").waitFor({ state: "hidden" });
