@@ -13,6 +13,8 @@
 
 # OpenDirector
 
+**[下载 OpenDirector](https://thinkflowlab.github.io/OpenDirector/zh-cn/#download)**，适用于搭载 Apple 芯片的 Mac 和 Windows x64 电脑。
+
 **从创作想法到可下载的短片：对话生成、画布管理、媒体编辑、时间线导出。**
 
 OpenDirector 是一个在本地运行、通过浏览器使用的 AI 视频创作工作台。你可以与助手讨论创意并生成素材，在画布上整理和迭代内容，用编辑工具调整图片、视频和音频，再通过时间线编排并导出 MP4。
