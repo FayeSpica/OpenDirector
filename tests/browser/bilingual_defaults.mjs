@@ -62,6 +62,7 @@ try {
   assert.ok(chooser.isMultiple());
   await chooser.setFiles({ name: "first-run.txt", mimeType: "text/plain", buffer: Buffer.from("A first draft") });
   await setup.waitFor({ state: "hidden" });
+  assert.equal(page.url(), `${base}/`);
   await page.locator(".react-flow__node-text").waitFor();
   await projectName.filter({ hasText: /^Untitled project$/ }).waitFor();
 

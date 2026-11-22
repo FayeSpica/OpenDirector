@@ -332,6 +332,11 @@ export function WorkspaceView({ rt }: { rt: WorkspaceRuntime }) {
   const finishFirstRun = () => {
     pendingFirstNodes.current = null;
     dismissModelSetup();
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("setup") === "welcome") {
+      url.searchParams.delete("setup");
+      window.history.replaceState(window.history.state, "", url);
+    }
     setFirstRunArriving(window.matchMedia("(prefers-reduced-motion: no-preference)").matches);
     setWelcomeOpen(false);
   };

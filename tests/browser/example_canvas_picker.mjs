@@ -145,7 +145,7 @@ try {
     id: "default", label: "Default", group: "default", modelSource: "settings",
     modelOverride: false, available: true, status: "ready",
   } }));
-  await page.goto(`${base}/ai-tool/ai-canvas/${projectId}?setup=welcome`);
+  await page.goto(`${base}/ai-tool/ai-canvas/${projectId}?setup=welcome&from=example`);
   const welcome = page.locator("dialog.cw-welcome");
   await welcome.getByRole("button", { name: "开始设置", exact: true }).click();
   await welcome.getByRole("button", { name: "配置语言模型", exact: true }).click();
@@ -167,12 +167,17 @@ try {
   await welcome.getByRole("alert").filter({ hasText: /服务器返回的是网页/ }).waitFor();
   assert.equal(await page.evaluate(() => localStorage.getItem("opendirector.modelSetup.v1")), null);
   assert.ok(await videoTask.isChecked());
+  assert.equal(new URL(page.url()).searchParams.get("setup"), "welcome");
   await welcome.getByRole("button", { name: "重试", exact: true }).click();
   await welcome.waitFor({ state: "hidden" });
   await page.waitForFunction(() => document.querySelectorAll(".react-flow__node").length === 2);
   assert.equal(attempts, 3);
   assert.equal(await dialog.count(), 0);
   assert.equal(await page.evaluate(() => localStorage.getItem("opendirector.modelSetup.v1")), "dismissed");
+  assert.equal(page.url(), `${base}/?from=example`);
+  await page.reload();
+  await page.waitForFunction(() => document.querySelectorAll(".react-flow__node").length === 2);
+  assert.equal(await welcome.isVisible(), false);
 
   assert.deepEqual(errors, []);
 } finally {

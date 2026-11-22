@@ -85,7 +85,7 @@ try {
     await codexButton.click();
     await welcome.getByRole("heading", { name: "What do you want to do first?" }).waitFor();
   };
-  await page.goto(url);
+  await page.goto(`${url}?setup=welcome&from=onboarding`);
   await welcomeTitle.waitFor();
   await welcome.getByRole("alert").getByText("Could not read model configuration. Try again.").waitFor();
   await welcome.getByRole("button", { name: "Reload", exact: true }).click();
@@ -256,6 +256,7 @@ try {
   assert.equal(await videoPicker.inputValue(), configured.id);
   assert.equal(await page.locator(".react-flow__node").count(), 0);
   assert.equal(await dismissed(), null);
+  assert.equal(new URL(page.url()).searchParams.get("setup"), "welcome");
   const savingNode = page.waitForRequest(isFirstNodeRequest);
   await start.click();
   const retried = await savingNode;
@@ -265,6 +266,7 @@ try {
   await page.locator(".react-flow__node").first().waitFor();
   await welcome.waitFor({ state: "hidden" });
   assert.equal(await dismissed(), "dismissed");
+  assert.equal(page.url(), `${base}/?from=onboarding`);
   const canvas = await page.request.get(base + projectPath + "/canvas", { headers });
   assert.ok(canvas.ok());
   const { snapshot } = await canvas.json();
@@ -272,6 +274,10 @@ try {
   assert.deepEqual(snapshot.generationSpecs.map((spec) => spec.modelConfigId).sort(), [configured.id, savedImage.id].sort());
   const [left, right] = [...snapshot.canvasItems].sort((a, b) => a.position.x - b.position.x);
   assert.ok(right.position.x >= left.position.x + left.width);
+
+  await page.reload();
+  await page.locator(".react-flow__node").first().waitFor();
+  assert.equal(await welcome.isVisible(), false);
 
   showBlockedImage = true;
   await page.goto(url + "?setup=welcome");
