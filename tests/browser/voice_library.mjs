@@ -189,7 +189,6 @@ const copy = {
     retry: "Retry",
     previousPage: "Previous page",
     nextPage: "Next page",
-    noPageMatches: "No matching voices on this page.",
     search: "Search voices",
     clearSearch: "Clear search",
     noSearchMatches: "No voices match your search.",
@@ -235,7 +234,6 @@ const copy = {
     retry: "重试",
     previousPage: "上一页",
     nextPage: "下一页",
-    noPageMatches: "本页没有符合条件的音色。",
     search: "搜索音色",
     clearSearch: "清除搜索",
     noSearchMatches: "没有找到匹配的音色。",
@@ -352,13 +350,63 @@ async function verifyPaginatedSearch({ dialog, L, open, page, params, selectMode
   assert.equal(await search.inputValue(), "aLtO");
   assert.deepEqual(await cards.allTextContents(), ["Alto 151"]);
   assert.equal(await previous.count(), 0);
+  await tab(L.all).click();
   await clear.click();
-  await library.getByText(L.noPageMatches, { exact: true }).waitFor();
   assert.equal(await search.inputValue(), "");
-  assert.equal(await tab(L.favorites).getAttribute("aria-selected"), "true");
+  // This voice is excluded by the query and only lives on the first provider
+  // page. Its return proves that browsing has moved back to page one.
+  await voice("Unrelated voice").waitFor();
   assert.equal(await previous.isDisabled(), true);
   assert.equal(await next.isEnabled(), true);
   assert.equal(await last.count(), 0);
+
+  const expectFavoriteWithoutSearch = async () => {
+    await tab(L.favorites).click();
+    assert.equal(await search.inputValue(), "");
+    await last.waitFor();
+    assert.deepEqual(await cards.allTextContents(), ["Alto 151"]);
+    assert.equal(await favorite.getAttribute("aria-pressed"), "true");
+  };
+  const closeLibrary = async () => {
+    await page.keyboard.press("Escape");
+    await library.waitFor({ state: "hidden" });
+  };
+  await expectFavoriteWithoutSearch();
+  await closeLibrary();
+
+  let laterRequests = 0;
+  const countLaterRequests = (request) => {
+    const { pathname, searchParams } = new URL(request.url());
+    if (
+      pathname === "/api/voices" &&
+      searchParams.get("modelConfigId") === searchCloud.id &&
+      searchParams.has("after")
+    ) {
+      laterRequests += 1;
+    }
+  };
+  page.on("request", countLaterRequests);
+  try {
+    await open();
+    await expectFavoriteWithoutSearch();
+    assert.equal(laterRequests, 0, "The saved favorite needs no later provider page on reopen");
+    await closeLibrary();
+
+    const removedRecords = await page.evaluate(() => {
+      const recordKeys = Object.keys(localStorage).filter((key) =>
+        key.startsWith("opendirector.voiceFavoriteRecords.v1:") &&
+        localStorage.getItem(key)?.includes('"search-alto-151"'),
+      );
+      for (const key of recordKeys) localStorage.removeItem(key);
+      return recordKeys.length;
+    });
+    assert.equal(removedRecords, 1);
+    await open();
+    await expectFavoriteWithoutSearch();
+    assert.ok(laterRequests > 0, "A legacy favorite ID is resolved from its provider page");
+  } finally {
+    page.off("request", countLaterRequests);
+  }
 
   await search.fill("青年");
   await noMatches.waitFor();
@@ -956,11 +1004,8 @@ try {
       await dialog()
         .getByRole("tab", { name: L.favorites, exact: true })
         .click();
-      await dialog().getByText(L.noPageMatches, { exact: true }).waitFor();
-      assert.equal(await previousPage.isDisabled(), true);
-      assert.equal(await uploaded.count(), 0);
-      await nextPage.click();
       await uploaded.waitFor();
+      assert.equal(await builtin.count(), 0);
       await dialog().getByRole("tab", { name: L.all, exact: true }).click();
       await builtin.waitFor();
       assert.equal(await previousPage.isDisabled(), true);

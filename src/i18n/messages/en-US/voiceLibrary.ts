@@ -14,6 +14,8 @@ export const voiceLibrary = {
   "voiceLibrary.uploadGuidance":
     "Upload a clear recording of one speaker to create a reusable voice.",
   "voiceLibrary.emptyFavorites": "No favorite voices yet.",
+  "voiceLibrary.loadingFavorites": "Looking for saved voices…",
+  "voiceLibrary.unavailableFavorites": "Your saved voices are unavailable from this service.",
   "voiceLibrary.search": "Search voices",
   "voiceLibrary.clearSearch": "Clear search",
   "voiceLibrary.noSearchMatches": "No voices match your search.",

@@ -14,6 +14,8 @@ export const voiceLibrary = {
   "voiceLibrary.uploadGuidance":
     "上传一段清晰的单人录音，创建可重复使用的音色。",
   "voiceLibrary.emptyFavorites": "还没有收藏音色。",
+  "voiceLibrary.loadingFavorites": "正在查找已收藏音色…",
+  "voiceLibrary.unavailableFavorites": "该服务当前没有可用的已收藏音色。",
   "voiceLibrary.search": "搜索音色",
   "voiceLibrary.clearSearch": "清除搜索",
   "voiceLibrary.noSearchMatches": "没有找到匹配的音色。",

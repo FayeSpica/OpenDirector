@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage, headers, responseError } from "../backend/api";
 import {
   deleteVoice,
@@ -12,7 +12,12 @@ import {
 import { useI18n } from "../i18n/I18nProvider";
 import { CanvasIcon } from "./CanvasIcon";
 import { CreateVoiceForm } from "./CreateVoiceForm";
-import { readVoiceFavorites, saveVoiceFavorites } from "./voiceFavorites";
+import {
+  readVoiceFavoriteRecords,
+  readVoiceFavorites,
+  saveVoiceFavoriteRecords,
+  saveVoiceFavorites,
+} from "./voiceFavorites";
 import "./voice-library.css";
 
 type Tab = "all" | "mine" | "favorites";
@@ -41,8 +46,15 @@ export function VoiceLibrary({
   const [page, setPage] = useState<VoicePage>();
   const [firstMossPage, setFirstMossPage] = useState<VoicePage>();
   const paginated = Boolean(page?.cursors.length || page?.nextCursor);
+  const moss = capabilities.provider === "moss";
+  const mossFavoritesTab = moss && tab === "favorites";
   const [favorites, setFavorites] = useState(() =>
     readVoiceFavorites(capabilities.connectionId),
+  );
+  const [favoriteRecords, setFavoriteRecords] = useState(() =>
+    moss
+      ? readVoiceFavoriteRecords(capabilities.connectionId, modelConfigId)
+      : new Map<string, VoiceRecord>(),
   );
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [pageLoading, setPageLoading] = useState(true);
@@ -57,11 +69,32 @@ export function VoiceLibrary({
   const searchInput = useRef<HTMLInputElement>(null);
   const searchTerm = query.trim().toLowerCase();
   const searching = searchTerm.length > 0;
-  const searchCatalog = searching ? catalog ?? firstMossPage : undefined;
-  const hasMoreSearchPages = Boolean(searchCatalog?.nextCursor);
-  const voices = (searchCatalog ?? page)?.voices ?? [];
-  const loading = searchCatalog ? hasMoreSearchPages && !catalogError : pageLoading;
-  const displayError = error || (searchCatalog ? catalogError : pageError);
+  const mossCatalog = catalog ?? firstMossPage;
+  const knownMossFavorites = useMemo(() => {
+    const known = new Map<string, VoiceRecord>();
+    if (!moss || !favorites.size) return known;
+    for (const id of favorites) {
+      const cached = favoriteRecords.get(id);
+      if (cached) known.set(id, cached);
+    }
+    for (const source of [firstMossPage, catalog, page]) {
+      for (const voice of source?.voices ?? []) {
+        if (favorites.has(voice.voiceId)) known.set(voice.voiceId, voice);
+      }
+    }
+    return known;
+  }, [moss, favorites, favoriteRecords, firstMossPage, catalog, page]);
+  const missingFavorites = mossFavoritesTab && knownMossFavorites.size < favorites.size;
+  const needsCatalog = mossFavoritesTab ? missingFavorites : searching;
+  const catalogView = needsCatalog ? mossCatalog : undefined;
+  const hasMoreCatalogPages = Boolean(catalogView?.nextCursor);
+  const voices = mossFavoritesTab
+    ? [...knownMossFavorites.values()]
+    : ((searching ? mossCatalog ?? page : page)?.voices ?? []);
+  const listLoading = catalogView ? hasMoreCatalogPages && !catalogError : pageLoading;
+  const loading = (!mossFavoritesTab || missingFavorites) && listLoading;
+  const listError = catalogView ? catalogError : pageError;
+  const displayError = error || (mossFavoritesTab && !missingFavorites ? "" : listError);
   const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<VoiceRecord>();
@@ -135,7 +168,7 @@ export function VoiceLibrary({
     t,
   ]);
   useEffect(() => {
-    if (!hasMoreSearchPages || !firstMossPage || creating) return;
+    if (!hasMoreCatalogPages || !firstMossPage || creating) return;
     const controller = new AbortController();
     setCatalogError("");
     const readRemainingPages = async (prefix: VoicePage) => {
@@ -170,8 +203,7 @@ export function VoiceLibrary({
         setCatalog(current);
       }
     };
-    // Keep the accepted prefix so clearing a search pauses traversal and retry
-    // can continue from the failed cursor without hiding existing matches.
+    // Resume at the accepted prefix for a new search or an unresolved favorite.
     void readRemainingPages(catalogProgress.current ?? firstMossPage).catch(
       (failure) => {
         if (!controller.signal.aborted) setCatalogError(errorMessage(failure));
@@ -179,7 +211,7 @@ export function VoiceLibrary({
     );
     return () => controller.abort();
   }, [
-    hasMoreSearchPages,
+    hasMoreCatalogPages,
     firstMossPage,
     creating,
     modelConfigId,
@@ -187,6 +219,15 @@ export function VoiceLibrary({
     catalogAttempt,
     t,
   ]);
+  useEffect(() => {
+    if (!moss) return;
+    if (
+      favoriteRecords.size === knownMossFavorites.size &&
+      [...knownMossFavorites].every(([id, voice]) => favoriteRecords.get(id) === voice)
+    ) return;
+    setFavoriteRecords(knownMossFavorites);
+    saveVoiceFavoriteRecords(capabilities.connectionId, modelConfigId, knownMossFavorites);
+  }, [moss, favoriteRecords, knownMossFavorites, capabilities.connectionId, modelConfigId]);
   const resetCardActivity = () => {
     stop();
     setDeleting(undefined);
@@ -213,12 +254,20 @@ export function VoiceLibrary({
     setSearchPage(0);
     if (!value.trim()) firstBrowsePage();
   };
-  const toggleFavorite = (id: string) => {
+  const toggleFavorite = (voice: VoiceRecord) => {
+    const id = voice.voiceId;
     const next = new Set(favorites);
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setFavorites(next);
     saveVoiceFavorites(capabilities.connectionId, next);
+    if (moss) {
+      const records = new Map(knownMossFavorites);
+      if (next.has(id)) records.set(id, voice);
+      else records.delete(id);
+      setFavoriteRecords(records);
+      saveVoiceFavoriteRecords(capabilities.connectionId, modelConfigId, records);
+    }
   };
   const preview = async (voice: VoiceRecord) => {
     if (!voice.previewUrl) return;
@@ -281,18 +330,28 @@ export function VoiceLibrary({
       (field) => !filters[field] || voice.metadata[field] === filters[field],
     ),
   );
+  const emptyBrowseMessage = tab === "favorites"
+    ? missingFavorites
+      ? "voiceLibrary.unavailableFavorites"
+      : "voiceLibrary.emptyFavorites"
+    : capabilities.supportsUploadedVoices === false
+      ? "voiceLibrary.modelUnsupported"
+      : paginated
+        ? "voiceLibrary.noPageMatches"
+        : "voiceLibrary.uploadGuidance";
   const resultPageCount = Math.ceil(matches.length / VOICE_PAGE_SIZE);
   const resultPage = Math.min(searchPage, Math.max(0, resultPageCount - 1));
-  const shown = searching
+  const localPages = searching || mossFavoritesTab;
+  const shown = localPages
     ? matches.slice(resultPage * VOICE_PAGE_SIZE, (resultPage + 1) * VOICE_PAGE_SIZE)
     : matches;
-  const pageNumber = searching ? resultPage : page?.cursors.length ?? 0;
-  const canAdvance = searching
+  const pageNumber = localPages ? resultPage : page?.cursors.length ?? 0;
+  const canAdvance = localPages
     ? resultPage + 1 < resultPageCount
     : Boolean(page?.nextCursor);
-  const pageControls = searching ? resultPageCount > 1 : paginated;
+  const pageControls = localPages ? resultPageCount > 1 : paginated;
   const turnPage = (direction: -1 | 1) => {
-    if (searching) {
+    if (localPages) {
       resetCardActivity();
       setSearchPage(resultPage + direction);
     } else if (page) {
@@ -453,7 +512,11 @@ export function VoiceLibrary({
       )}
       {loading && (
         <p role="status">
-          {t(searchCatalog ? "voiceLibrary.searchingMore" : "voiceLibrary.loading")}
+          {t(mossFavoritesTab
+            ? "voiceLibrary.loadingFavorites"
+            : catalogView
+              ? "voiceLibrary.searchingMore"
+              : "voiceLibrary.loading")}
         </p>
       )}
       {displayError && (
@@ -463,7 +526,7 @@ export function VoiceLibrary({
             type="button"
             onClick={() => {
               setError("");
-              if (searchCatalog && catalogError)
+              if (catalogView && catalogError)
                 setCatalogAttempt((value) => value + 1);
               else setAttempt((value) => value + 1);
             }}
@@ -517,7 +580,7 @@ export function VoiceLibrary({
                     },
                 );
                 if (favorites.has(deleting.voiceId))
-                  toggleFavorite(deleting.voiceId);
+                  toggleFavorite(deleting);
                 setDeleting(undefined);
                 setAttempt((value) => value + 1);
               } catch (failure) {
@@ -549,29 +612,19 @@ export function VoiceLibrary({
           {createButton}
           <p role="status">{t("voiceLibrary.noSearchMatches")}</p>
         </div>
-      ) : !searching && page && !loading && !relevant.length ? (
+      ) : !searching && (page || mossFavoritesTab) && !loading && !displayError && !relevant.length ? (
         <div
           className="cw-voice-empty"
           role="tabpanel"
           aria-label={t(`voiceLibrary.${tab}`)}
         >
           {createButton}
-          <p>
-            {t(
-              capabilities.supportsUploadedVoices === false
-                ? "voiceLibrary.modelUnsupported"
-                : paginated && (tab !== "favorites" || favorites.size > 0)
-                  ? "voiceLibrary.noPageMatches"
-                  : tab === "favorites"
-                    ? "voiceLibrary.emptyFavorites"
-                    : "voiceLibrary.uploadGuidance",
-            )}
-          </p>
+          <p>{t(emptyBrowseMessage)}</p>
         </div>
       ) : (
         <div
           className="cw-voice-grid"
-          key={searching ? `search:${resultPage}` : page?.cursors.at(-1) ?? ""}
+          key={localPages ? `results:${resultPage}` : page?.cursors.at(-1) ?? ""}
           role="tabpanel"
           aria-label={t(`voiceLibrary.${tab}`)}
         >
@@ -637,7 +690,7 @@ export function VoiceLibrary({
                   { name: voice.name },
                 )}
                 aria-pressed={favorites.has(voice.voiceId)}
-                onClick={() => toggleFavorite(voice.voiceId)}
+                onClick={() => toggleFavorite(voice)}
               >
                 <CanvasIcon name="star" size={14} />
               </button>
@@ -685,7 +738,7 @@ export function VoiceLibrary({
           {!searching && !loading && relevant.length > 0 && shown.length === 0 && (
             <p>
               {t(
-                paginated
+                paginated && !mossFavoritesTab
                   ? "voiceLibrary.noPageMatches"
                   : "voiceLibrary.noMatches",
               )}
@@ -697,7 +750,7 @@ export function VoiceLibrary({
         <div className="cw-voice-pages">
           <button
             type="button"
-            disabled={(!searching && loading) || pageNumber === 0}
+            disabled={(!localPages && loading) || pageNumber === 0}
             onClick={() => turnPage(-1)}
           >
             {t("voiceLibrary.previousPage")}
@@ -707,7 +760,7 @@ export function VoiceLibrary({
           </span>
           <button
             type="button"
-            disabled={(!searching && loading) || !canAdvance}
+            disabled={(!localPages && loading) || !canAdvance}
             onClick={() => turnPage(1)}
           >
             {t("voiceLibrary.nextPage")}
