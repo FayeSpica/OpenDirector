@@ -87,7 +87,7 @@ export function AssistantPanel({
 }) {
   const t = useT();
   const chat = useAssistantChat(documentId, catalog, onTurnEnd, t, open);
-  const { value, setValue } = chat;
+  const { value } = chat;
   const [deepseekLabels, setDeepseekLabels] = useState<Record<string, string>>({});
   const hasDeepseekMessages = value.messages.some((message) => message.runtime === "deepseek");
   useEffect(() => {
@@ -734,12 +734,7 @@ export function AssistantPanel({
               models={catalog.models}
               selections={value.modelSelections}
               disabled={!chat.loaded || !catalog.connected || chat.sending}
-              onChange={(kind, id) =>
-                setValue((previous) => ({
-                  ...previous,
-                  modelSelections: { ...previous.modelSelections, [kind]: id },
-                }))
-              }
+              onChange={chat.selectMediaModel}
               onConfigure={onOpenSettings}
             />
             <div className="cw-assistant-toolbar-spacer" />
