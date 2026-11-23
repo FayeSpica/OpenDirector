@@ -511,7 +511,12 @@ export function VoiceLibrary({
         </div>
       )}
       {loading && (
-        <p role="status">
+        <p className="cw-voice-loading" role="status">
+          <span className="cw-voice-loading-wave" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
           {t(mossFavoritesTab
             ? "voiceLibrary.loadingFavorites"
             : catalogView
@@ -629,6 +634,14 @@ export function VoiceLibrary({
           aria-label={t(`voiceLibrary.${tab}`)}
         >
           {createButton}
+          {loading && !displayError && shown.length === 0 &&
+            [0, 1, 2].map((slot) => (
+              <div className="cw-voice-entry cw-voice-skeleton" key={slot} aria-hidden="true">
+                <span className="cw-voice-circle" />
+                <span className="cw-voice-skeleton-name" />
+                <span className="cw-voice-skeleton-actions" />
+              </div>
+            ))}
           {shown.map((voice) => (
             <div
               className={`cw-voice-entry${isSelectedVoice(voice) ? " cw-is-active" : ""}`}
