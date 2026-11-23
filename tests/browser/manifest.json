@@ -553,12 +553,25 @@
       "note": "Runs with voice_library_server.py in the Release checks voice library phase."
     },
     {
+      "file": "new_model_discovery.mjs",
+      "previewSafe": true,
+      "lanes": [
+        "gate"
+      ],
+      "note": "Discovers a new text model from a loopback GET /models service, saves it, and selects it in the assistant."
+    },
+    {
+      "file": "zhipu_catalog_fixture.mjs",
+      "helper": true,
+      "note": "Shared loopback catalog fixture for the new-model and Zhipu feedback tests."
+    },
+    {
       "file": "zhipu_provider.mjs",
       "previewSafe": true,
       "lanes": [
         "gate"
       ],
-      "note": "Bilingual model discovery through the API and a loopback GET /models service, including upstream failure and retry."
+      "note": "Bilingual catalog feedback, retry and empty responses, and Zhipu audio preset isolation."
     },
     {
       "file": "kimi_real.mjs",
