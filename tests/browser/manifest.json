@@ -556,8 +556,9 @@
       "file": "zhipu_provider.mjs",
       "previewSafe": true,
       "lanes": [
-        "extended"
-      ]
+        "gate"
+      ],
+      "note": "Bilingual model discovery through the API and a loopback GET /models service, including upstream failure and retry."
     },
     {
       "file": "kimi_real.mjs",

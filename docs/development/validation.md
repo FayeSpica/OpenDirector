@@ -612,7 +612,7 @@ CREATION_API_URL=http://127.0.0.1:8019 CREATION_WEB_URL=http://127.0.0.1:5179 no
 
 The Python cases check how the shared thinking levels map to GLM reasoning_effort. GLM accepts only low, high and max for reasoning_effort. The auto level omits the parameter so the provider default applies, and an unknown level falls back to high as in the DeepSeek branch. Other hosts and the DeepSeek behavior stay unchanged.
 
-The browser case checks both display languages for the provider list and names, canonical URL prefill, GLM model preselection without remote discovery, manual addition of other model IDs, the saved connection reuse hint, save and reopen, key privacy in public model responses, and the assistant agent picker listing and keeping the selected Zhipu model. The browser never contacts open.bigmodel.cn and the API key is always a fixture value. Real streaming conversations, tool call execution and thinking level effects additionally require valid Zhipu credentials. Keep the conversation transcript, tool receipts and screenshots as evidence.
+The PR browser gate checks both display languages. Choosing the Zhipu text preset preselects suggested models. Fetching text models sends an authenticated `GET /models` through the discovery API and makes a new model ID selectable. An upstream HTTP failure is visible and manual entry remains available. Loading the Zhipu audio preset lists only `glm-tts` and sends no discovery request. The case also checks save and reopen, key privacy, and the assistant model picker. It uses an isolated HTTP fixture with a synthetic API key. Real streaming conversations, tool calls, and thinking levels require a separate run with valid Zhipu credentials.
 
 智谱 BigModel GLM-TTS 接入使用以下检查：
 
