@@ -120,7 +120,6 @@ h1, .tagline {
   margin-inline: auto;
 }
 #download { scroll-margin-top: 64px; }
-.mac-first-launch { display: inline-block; margin-top: 12px; color: #e6e9ef; font-size: .875rem; }
 .primary, .nav-github {
   display: inline-flex;
   justify-content: center;
