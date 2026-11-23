@@ -51,6 +51,7 @@ export function renderDownloadPage(template, installers, locale = "en-US") {
   }
 
   const chinese = locale === "zh-CN";
+  const installHref = `${repository}/blob/main/docs/guides/installation${chinese ? ".zh-CN" : ""}.md`;
   const values = {
     ...copy,
     locale,
@@ -60,7 +61,8 @@ export function renderDownloadPage(template, installers, locale = "en-US") {
     canonical: siteUrl + page.path,
     ogLocale: locale.replace("-", "_"),
     shareImage: `${siteUrl}canvas.jpg`,
-    installHref: `${repository}/blob/main/docs/guides/installation${chinese ? ".zh-CN" : ""}.md`,
+    installHref,
+    sourceInstallHref: `${installHref}#source-installation`,
     aiInstallHref: chinese ? `${repository}/blob/main/README.zh-CN.md#一句话安装` : `${repository}#install-with-ai`,
   };
   const html = {
@@ -69,6 +71,9 @@ export function renderDownloadPage(template, installers, locale = "en-US") {
     chineseCurrent: chinese ? ' aria-current="page"' : "",
     primaryHidden: notes.size ? " hidden" : "",
     menuHidden: notes.size ? "" : " hidden",
+    macFirstLaunchLink: installers.mac
+      ? `<a class="mac-first-launch" href="${escapeHtml(installHref)}#macos-first-launch">${escapeHtml(copy.macFirstLaunch)}</a>`
+      : "",
     desktopOptions: options.join("\n"),
     desktopNotes: releaseNotes.join("\n    "),
   };

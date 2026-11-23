@@ -16,6 +16,7 @@ const locales = [
     tagline: /open-source AI video editor/i,
     intro: /canvas.*timeline/i,
     downloadLabel: "Download OpenDirector",
+    macFirstLaunch: "First launch on macOS",
     guide: "installation.md",
     notesLabel: "release notes",
     testLabel: "Test build",
@@ -29,6 +30,7 @@ const locales = [
     tagline: /开源.*AI.*视频/,
     intro: /画布.*时间线/,
     downloadLabel: "下载 OpenDirector",
+    macFirstLaunch: "macOS 首次打开",
     guide: "installation.zh-CN.md",
     notesLabel: "发布说明",
     testLabel: "测试版",
@@ -129,8 +131,15 @@ try {
     assert.equal(await staticPage.locator(".film-player video").evaluate(video => video.src), filmUrl);
     assert.equal(
       await staticPage.locator(".install a").getAttribute("href"),
-      `${repository}/blob/main/docs/guides/${locale.guide}`,
+      `${repository}/blob/main/docs/guides/${locale.guide}#source-installation`,
     );
+    const macGuide = staticPage.getByRole("link", { name: locale.macFirstLaunch, exact: true });
+    if (await staticPage.locator('.hero a[data-system="mac"]').count()) {
+      assert.ok(await macGuide.isVisible());
+      assert.equal(await macGuide.getAttribute("href"), `${repository}/blob/main/docs/guides/${locale.guide}#macos-first-launch`);
+    } else {
+      assert.equal(await macGuide.count(), 0);
+    }
     staticDownloads.set(locale.lang, await checkStaticDownloads(staticPage));
     const switchLink = languageLink(staticPage, otherLocale);
     assert.equal(await switchLink.evaluate(link => link.href), otherLocale.url);
@@ -266,6 +275,7 @@ try {
       assert.equal(await recommended.getAttribute("href"), release.url);
       assert.equal(await client.locator(".scroll-actions .actions > a").getAttribute("href"), release.url);
       assert.equal(await client.locator("#download").count(), 1);
+      assert.ok(await client.getByRole("link", { name: locale.macFirstLaunch, exact: true }).isVisible());
       await client.locator(".hero summary").click();
       const detail = await client.locator(`.hero details [data-system="${system}"] small`).innerText();
       assert.ok(detail.includes(release.version));
