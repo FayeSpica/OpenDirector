@@ -3,6 +3,7 @@ import { errorMessage, headers, responseError } from "../backend/api";
 import {
   deleteVoice,
   listVoices,
+  VOICE_PAGE_SIZE,
   voiceSelection,
   type VoiceCapabilities,
   type VoiceRecord,
@@ -15,6 +16,11 @@ import { readVoiceFavorites, saveVoiceFavorites } from "./voiceFavorites";
 import "./voice-library.css";
 
 type Tab = "all" | "mine" | "favorites";
+type VoicePage = {
+  voices: VoiceRecord[];
+  cursors: string[];
+  nextCursor: string | null;
+};
 const tabs: Tab[] = ["all", "mine", "favorites"];
 const filterFields = ["gender", "age", "language", "style"] as const;
 
@@ -32,19 +38,30 @@ export function VoiceLibrary({
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("all");
   const [requestedCursors, setRequestedCursors] = useState<string[]>([]);
-  const [page, setPage] = useState<{
-    voices: VoiceRecord[];
-    cursors: string[];
-    nextCursor: string | null;
-  }>();
-  const voices = page?.voices ?? [];
+  const [page, setPage] = useState<VoicePage>();
+  const [firstMossPage, setFirstMossPage] = useState<VoicePage>();
   const paginated = Boolean(page?.cursors.length || page?.nextCursor);
   const [favorites, setFavorites] = useState(() =>
     readVoiceFavorites(capabilities.connectionId),
   );
   const [filters, setFilters] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
   const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [searchPage, setSearchPage] = useState(0);
+  const [catalog, setCatalog] = useState<VoicePage>();
+  const catalogProgress = useRef<VoicePage>(undefined);
+  const [catalogError, setCatalogError] = useState("");
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const searchTerm = query.trim().toLowerCase();
+  const searching = searchTerm.length > 0;
+  const searchCatalog = searching ? catalog ?? firstMossPage : undefined;
+  const hasMoreSearchPages = Boolean(searchCatalog?.nextCursor);
+  const voices = (searchCatalog ?? page)?.voices ?? [];
+  const loading = searchCatalog ? hasMoreSearchPages && !catalogError : pageLoading;
+  const displayError = error || (searchCatalog ? catalogError : pageError);
   const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<VoiceRecord>();
@@ -78,33 +95,35 @@ export function VoiceLibrary({
   }, []);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setError("");
-    const query =
-      capabilities.provider === "moss"
-        ? {
-            connectionId: capabilities.connectionId,
-            after: requestedCursors.at(-1),
-          }
-        : undefined;
-    listVoices(modelConfigId, controller.signal, query)
+    setPageLoading(true);
+    setPageError("");
+    const scope = {
+      connectionId: capabilities.connectionId,
+      page: capabilities.provider === "moss"
+        ? { after: requestedCursors.at(-1) }
+        : undefined,
+    };
+    listVoices(modelConfigId, controller.signal, scope)
       .then((data) => {
         if (controller.signal.aborted) return;
         if (data.connectionId !== capabilities.connectionId)
           throw Error(t("voiceLibrary.connectionChanged"));
         if (data.nextCursor && requestedCursors.includes(data.nextCursor))
           throw Error(t("voiceLibrary.invalidPage"));
-        setPage({
+        const loaded = {
           voices: data.voices,
           cursors: requestedCursors,
           nextCursor: data.nextCursor ?? null,
-        });
+        };
+        setPage(loaded);
+        if (capabilities.provider === "moss" && requestedCursors.length === 0)
+          setFirstMossPage(loaded);
       })
       .catch((failure) => {
-        if (!controller.signal.aborted) setError(errorMessage(failure));
+        if (!controller.signal.aborted) setPageError(errorMessage(failure));
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) setPageLoading(false);
       });
     return () => controller.abort();
   }, [
@@ -115,17 +134,84 @@ export function VoiceLibrary({
     attempt,
     t,
   ]);
-  const changePage = (cursors: string[]) => {
+  useEffect(() => {
+    if (!hasMoreSearchPages || !firstMossPage || creating) return;
+    const controller = new AbortController();
+    setCatalogError("");
+    const readRemainingPages = async (prefix: VoicePage) => {
+      let current = prefix;
+      let size = 100;
+      const seenIds = new Set(current.voices.map((voice) => voice.voiceId));
+      const seenCursors = new Set(current.cursors);
+      while (current.nextCursor && !controller.signal.aborted) {
+        const after = current.nextCursor;
+        const data = await listVoices(modelConfigId, controller.signal, {
+          connectionId: capabilities.connectionId,
+          page: { after, size },
+        });
+        if (controller.signal.aborted) return;
+        if (data.connectionId !== capabilities.connectionId)
+          throw Error(t("voiceLibrary.connectionChanged"));
+        seenCursors.add(after);
+        if (
+          (data.nextCursor && seenCursors.has(data.nextCursor)) ||
+          data.voices.some((voice) => seenIds.has(voice.voiceId))
+        ) {
+          throw Error(t("voiceLibrary.invalidPage"));
+        }
+        for (const voice of data.voices) seenIds.add(voice.voiceId);
+        if (data.voices.length <= 50) size = 50;
+        current = {
+          voices: [...current.voices, ...data.voices],
+          cursors: [...current.cursors, after],
+          nextCursor: data.nextCursor ?? null,
+        };
+        catalogProgress.current = current;
+        setCatalog(current);
+      }
+    };
+    // Keep the accepted prefix so clearing a search pauses traversal and retry
+    // can continue from the failed cursor without hiding existing matches.
+    void readRemainingPages(catalogProgress.current ?? firstMossPage).catch(
+      (failure) => {
+        if (!controller.signal.aborted) setCatalogError(errorMessage(failure));
+      },
+    );
+    return () => controller.abort();
+  }, [
+    hasMoreSearchPages,
+    firstMossPage,
+    creating,
+    modelConfigId,
+    capabilities.connectionId,
+    catalogAttempt,
+    t,
+  ]);
+  const resetCardActivity = () => {
     stop();
     setDeleting(undefined);
     setNotice("");
+    setError("");
+  };
+  const firstBrowsePage = () => {
+    setRequestedCursors((current) => current.length ? [] : current);
+  };
+  const changePage = (cursors: string[]) => {
+    resetCardActivity();
     setRequestedCursors(cursors);
   };
   const changeTab = (next: Tab) => {
-    stop();
+    if (next === tab) return;
+    resetCardActivity();
     setTab(next);
-    setNotice("");
-    setDeleting(undefined);
+    setSearchPage(0);
+    if (!searching) firstBrowsePage();
+  };
+  const changeQuery = (value: string) => {
+    resetCardActivity();
+    setQuery(value);
+    setSearchPage(0);
+    if (!value.trim()) firstBrowsePage();
   };
   const toggleFavorite = (id: string) => {
     const next = new Set(favorites);
@@ -189,11 +275,31 @@ export function VoiceLibrary({
         ? voice.source === "uploaded"
         : favorites.has(voice.voiceId)),
   );
-  const shown = relevant.filter((voice) =>
+  const matches = relevant.filter((voice) =>
+    (!searching || voice.name.toLowerCase().includes(searchTerm)) &&
     filterFields.every(
       (field) => !filters[field] || voice.metadata[field] === filters[field],
     ),
   );
+  const resultPageCount = Math.ceil(matches.length / VOICE_PAGE_SIZE);
+  const resultPage = Math.min(searchPage, Math.max(0, resultPageCount - 1));
+  const shown = searching
+    ? matches.slice(resultPage * VOICE_PAGE_SIZE, (resultPage + 1) * VOICE_PAGE_SIZE)
+    : matches;
+  const pageNumber = searching ? resultPage : page?.cursors.length ?? 0;
+  const canAdvance = searching
+    ? resultPage + 1 < resultPageCount
+    : Boolean(page?.nextCursor);
+  const pageControls = searching ? resultPageCount > 1 : paginated;
+  const turnPage = (direction: -1 | 1) => {
+    if (searching) {
+      resetCardActivity();
+      setSearchPage(resultPage + direction);
+    } else if (page) {
+      if (direction === -1) changePage(page.cursors.slice(0, -1));
+      else if (page.nextCursor) changePage([...page.cursors, page.nextCursor]);
+    }
+  };
   const availableFilters = filterFields
     .map((field) => ({
       field,
@@ -297,6 +403,30 @@ export function VoiceLibrary({
           </button>
         ))}
       </div>
+      <div className="cw-voice-search">
+        <CanvasIcon name="search" size={16} aria-hidden="true" />
+        <input
+          ref={searchInput}
+          type="search"
+          aria-label={t("voiceLibrary.search")}
+          placeholder={t("voiceLibrary.search")}
+          value={query}
+          onChange={(event) => changeQuery(event.target.value)}
+        />
+        {query && (
+          <button
+            type="button"
+            aria-label={t("voiceLibrary.clearSearch")}
+            title={t("voiceLibrary.clearSearch")}
+            onClick={() => {
+              changeQuery("");
+              searchInput.current?.focus();
+            }}
+          >
+            <CanvasIcon name="close" size={14} />
+          </button>
+        )}
+      </div>
       {availableFilters.length > 0 && (
         <div className="cw-voice-filters">
           {availableFilters.map(({ field, values }) => (
@@ -304,9 +434,10 @@ export function VoiceLibrary({
               key={field}
               aria-label={t(`voiceLibrary.${field}`)}
               value={filters[field] || ""}
-              onChange={(event) =>
-                setFilters({ ...filters, [field]: event.target.value })
-              }
+              onChange={(event) => {
+                setFilters({ ...filters, [field]: event.target.value });
+                setSearchPage(0);
+              }}
             >
               <option value="">
                 {t("voiceLibrary.allFilter", {
@@ -320,13 +451,22 @@ export function VoiceLibrary({
           ))}
         </div>
       )}
-      {loading && <p role="status">{t("voiceLibrary.loading")}</p>}
-      {error && (
+      {loading && (
+        <p role="status">
+          {t(searchCatalog ? "voiceLibrary.searchingMore" : "voiceLibrary.loading")}
+        </p>
+      )}
+      {displayError && (
         <div className="cw-voice-error" role="alert">
-          {error}{" "}
+          {displayError}{" "}
           <button
             type="button"
-            onClick={() => setAttempt((value) => value + 1)}
+            onClick={() => {
+              setError("");
+              if (searchCatalog && catalogError)
+                setCatalogAttempt((value) => value + 1);
+              else setAttempt((value) => value + 1);
+            }}
           >
             {t("voiceLibrary.retry")}
           </button>
@@ -334,7 +474,7 @@ export function VoiceLibrary({
       )}
       {notice && <p role="status">{notice}</p>}
       {!loading &&
-        !error &&
+        !displayError &&
         !paginated &&
         selected &&
         selected.connectionId === capabilities.connectionId &&
@@ -392,7 +532,7 @@ export function VoiceLibrary({
         </div>
       )}
       {!loading &&
-        !error &&
+        !displayError &&
         !paginated &&
         capabilities.requiresReferenceAudio &&
         !voices.some(
@@ -400,7 +540,16 @@ export function VoiceLibrary({
         ) && (
           <p className="cw-voice-hint">{t("voiceLibrary.referenceRequired")}</p>
         )}
-      {page && !loading && !relevant.length ? (
+      {searching && !loading && !displayError && !shown.length ? (
+        <div
+          className="cw-voice-empty"
+          role="tabpanel"
+          aria-label={t(`voiceLibrary.${tab}`)}
+        >
+          {createButton}
+          <p role="status">{t("voiceLibrary.noSearchMatches")}</p>
+        </div>
+      ) : !searching && page && !loading && !relevant.length ? (
         <div
           className="cw-voice-empty"
           role="tabpanel"
@@ -422,7 +571,7 @@ export function VoiceLibrary({
       ) : (
         <div
           className="cw-voice-grid"
-          key={page?.cursors.at(-1) ?? ""}
+          key={searching ? `search:${resultPage}` : page?.cursors.at(-1) ?? ""}
           role="tabpanel"
           aria-label={t(`voiceLibrary.${tab}`)}
         >
@@ -533,7 +682,7 @@ export function VoiceLibrary({
               </details>
             </div>
           ))}
-          {!loading && relevant.length > 0 && shown.length === 0 && (
+          {!searching && !loading && relevant.length > 0 && shown.length === 0 && (
             <p>
               {t(
                 paginated
@@ -544,25 +693,22 @@ export function VoiceLibrary({
           )}
         </div>
       )}
-      {paginated && page && (
+      {pageControls && (
         <div className="cw-voice-pages">
           <button
             type="button"
-            disabled={loading || page.cursors.length === 0}
-            onClick={() => changePage(page.cursors.slice(0, -1))}
+            disabled={(!searching && loading) || pageNumber === 0}
+            onClick={() => turnPage(-1)}
           >
             {t("voiceLibrary.previousPage")}
           </button>
           <span>
-            {t("voiceLibrary.page", { number: page.cursors.length + 1 })}
+            {t("voiceLibrary.page", { number: pageNumber + 1 })}
           </span>
           <button
             type="button"
-            disabled={loading || !page.nextCursor}
-            onClick={() => {
-              if (page.nextCursor)
-                changePage([...page.cursors, page.nextCursor]);
-            }}
+            disabled={(!searching && loading) || !canAdvance}
+            onClick={() => turnPage(1)}
           >
             {t("voiceLibrary.nextPage")}
           </button>

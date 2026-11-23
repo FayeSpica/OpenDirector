@@ -14,6 +14,9 @@ export const voiceLibrary = {
   "voiceLibrary.uploadGuidance":
     "Upload a clear recording of one speaker to create a reusable voice.",
   "voiceLibrary.emptyFavorites": "No favorite voices yet.",
+  "voiceLibrary.search": "Search voices",
+  "voiceLibrary.clearSearch": "Clear search",
+  "voiceLibrary.noSearchMatches": "No voices match your search.",
   "voiceLibrary.noMatches": "No voices match these filters.",
   "voiceLibrary.noPageMatches": "No matching voices on this page.",
   "voiceLibrary.previousPage": "Previous page",
@@ -21,6 +24,7 @@ export const voiceLibrary = {
   "voiceLibrary.page": "Page {number}",
   "voiceLibrary.invalidPage": "The voice service returned a repeated page.",
   "voiceLibrary.loading": "Loading voices…",
+  "voiceLibrary.searchingMore": "Searching more voices…",
   "voiceLibrary.retry": "Retry",
   "voiceLibrary.preview": "Preview {name}",
   "voiceLibrary.stop": "Stop previewing {name}",
