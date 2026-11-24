@@ -438,6 +438,13 @@ def test_run_layout_respects_locked_runs_and_ordinary_root_items(api):
     assert after[managed_id]['autoLayout'] == 'run'
     _assert_disjoint([after[key] for key in (fixed_id, ordinary_id, managed_id)])
 
+    child = _show_layout_item(project_id, 'text', parentId=fixed_id)
+    added = client.post(path + '/commands', json={
+        **child, 'commandId': str(uuid4()), 'projectId': project_id,
+    }).json()
+    assert added['status'] == 'rejected', added
+    assert added['issues'][0]['code'] == 'role_restricted'
+
     stale = client.post(path + '/commands', json=dict(
         type='canvas.update', commandId=str(uuid4()), projectId=project_id,
         expectedVersions=[dict(objectType='canvas_item', id=managed_id, revision=before[managed_id]['revision'])],

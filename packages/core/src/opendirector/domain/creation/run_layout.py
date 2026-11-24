@@ -133,10 +133,11 @@ def layout_runs(data: dict):
     _pack(runs, fixed, left=0, top=0, right=_RUN_ROW_WIDTH, gap=_RUN_GAP)
 
 
-def _validate_ownership(canvas, managed):
-    if len(managed) < 2:
-        return
+def _validate_membership(canvas, managed, original):
     items = {item['id']: item for item in canvas}
+    locked = {run_id for run_id in managed if items[run_id]['locked'] and original.get(run_id, {}).get('locked')}
+    if len(managed) < 2 and not locked:
+        return
     owners = {}
     for item in canvas:
         root = item
@@ -145,6 +146,10 @@ def _validate_ownership(canvas, managed):
         run_id = root['id']
         if run_id not in managed:
             continue
+        previous = original.get(item['id'])
+        if run_id in locked and item is not root and (previous is None
+                or previous['parentId'] != item['parentId'] or (item['visible'] and not previous['visible'])):
+            raise ContractError('role_restricted', '所属 Run 已锁定，请解锁后再加入或显示节点。', UUID(run_id))
         binding = item['binding']
         references = list(item.get('editors', ()))
         if binding['role'] in {'generation', 'editor'}:
@@ -166,8 +171,8 @@ def reflow_runs(before: ProjectSnapshot, edited: ProjectSnapshot, *, force=False
     if not managed:
         return edited, set()
     canvas = [item.model_dump(mode='json') for item in edited.canvasItems]
-    _validate_ownership(canvas, managed)
     original = {str(item.id): item.model_dump(mode='json') for item in before.canvasItems}
+    _validate_membership(canvas, managed, original)
     if (not force and len(canvas) == len(original)
             and all(item['id'] in original and all(
                 item.get(field) == original[item['id']].get(field) for field in _LAYOUT_FIELDS
