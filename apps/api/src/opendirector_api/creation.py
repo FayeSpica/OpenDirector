@@ -145,7 +145,7 @@ def creation_routes(projects: CreationProjects, generation=None, prompt_optimiza
         session = str(x_opendirector_session)
         editing = {}
         if x_opendirector_allow_preview:
-            snapshot, state = projects.open_canvas(project_id, session)
+            snapshot, state = projects.open_canvas(project_id, session, allow_preview=True)
             editing['editing'] = state
         else:
             snapshot = projects.open(project_id, session)

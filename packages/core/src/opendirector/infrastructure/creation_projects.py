@@ -121,7 +121,9 @@ class CreationProjects(ProjectCatalog, CommitLog, CommitPublication):
                 return ViewState.model_validate(read_json(file))
             return None if missing_ok else ViewState(projectId=project_id, clientId=client_id)
 
-    def _open_canvas(self, project_id, session, *, allow_preview=False):
+    def open_canvas(
+        self, project_id: UUID | str, session: str, *, allow_preview: bool,
+    ) -> tuple[ProjectSnapshot, dict[str, str | None]]:
         with self.local.transaction() as db:
             self._recover()
             path, manifest = self._find(db, project_id)
@@ -132,9 +134,9 @@ class CreationProjects(ProjectCatalog, CommitLog, CommitPublication):
                     self.local.clear_other_edit_requests(db, str(project_id), session)
                     db.execute("DELETE FROM sessions WHERE id=?", (session,))
                 else:
-                    self.local._open(db, project, session)
+                    self.local.acquire_edit_lease(db, project, session)
             else:
-                self.local._open(db, project, session)
+                self.local.acquire_edit_lease(db, project, session)
             state = self.local.editing_state(db, str(project_id), session)
             record, validated = self._current_record(db, project_id, path, manifest)
             if not validated:
@@ -143,12 +145,9 @@ class CreationProjects(ProjectCatalog, CommitLog, CommitPublication):
                 self._schedule_warm(path, manifest)
             return record.snapshot.model_copy(deep=True), state
 
-    def open(self, project_id, session):
-        snapshot, _ = self._open_canvas(project_id, session)
+    def open(self, project_id: UUID | str, session: str) -> ProjectSnapshot:
+        snapshot, _ = self.open_canvas(project_id, session, allow_preview=False)
         return snapshot
-
-    def open_canvas(self, project_id, session):
-        return self._open_canvas(project_id, session, allow_preview=True)
 
     def editing_state(self, project_id, session):
         with self.local.transaction() as db:

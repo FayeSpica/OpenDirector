@@ -128,7 +128,7 @@ class LocalProjects:
                 raise ProjectError("该位置已有同名文件或文件夹，请使用其他名称。", 409)
 
 
-    def _open(self, db, project: dict, session: str):
+    def acquire_edit_lease(self, db: sqlite3.Connection, project: dict[str, str], session: str) -> None:
         identifier(session)
         project_id = project["id"]
         self.clear_other_edit_requests(db, project_id, session)
@@ -175,7 +175,7 @@ class LocalProjects:
         now = time.time()
         state = self.editing_state(db, project_id, session, now=now)
         if state == {'mode': 'preview', 'handoff': 'available'}:
-            self._open(db, project, session)
+            self.acquire_edit_lease(db, project, session)
         elif state == {'mode': 'preview', 'handoff': 'occupied'}:
             db.execute("""
                 INSERT INTO edit_handoffs(project_id,owner,requester,expires) VALUES (?,?,?,?)
@@ -190,7 +190,7 @@ class LocalProjects:
             db.execute("DELETE FROM edit_handoffs WHERE project_id=?", (project_id,))
             if accept:
                 db.execute("DELETE FROM sessions WHERE id=?", (session,))
-                self._open(db, project, requester)
+                self.acquire_edit_lease(db, project, requester)
         return self.editing_state(db, project_id, session)
 
     def agent_session_key(self, session: str) -> str:
