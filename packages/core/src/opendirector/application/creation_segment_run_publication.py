@@ -3,7 +3,6 @@
 from pathlib import Path
 from shutil import copyfileobj
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING
 from uuid import uuid4, uuid5
 
 from opendirector.application.creation_assets import CreationAssets
@@ -17,9 +16,6 @@ from opendirector.domain.projects import ProjectError
 from opendirector.media.probe import count_video_frames
 from opendirector.ports.files import AssetFileWrite
 from opendirector.ports.gateway import gateway
-
-if TYPE_CHECKING:
-    from opendirector.infrastructure.creation_projects import CreationProjects
 
 
 def validate_plan(snapshot: ProjectSnapshot, payload: GroupPlanDraft) -> GroupCanvasItem:
@@ -83,7 +79,7 @@ def plan_markdown(group: GroupCanvasItem, snapshot: ProjectSnapshot, payload: Gr
     return '\n'.join(rows) + '\n'
 
 
-def save_segment_plan(projects: "CreationProjects", command: Command, *, session: str | None, source: str) -> CommandReceipt:
+def save_segment_plan(projects, command: Command, *, session: str | None, source: str) -> CommandReceipt:
     payload = command.payload
 
     def save(snapshot: ProjectSnapshot) -> ProjectSnapshot:
@@ -101,7 +97,7 @@ def save_segment_plan(projects: "CreationProjects", command: Command, *, session
     return projects.commit(command, save, session=session, source=source)
 
 
-def publish_segment_plan(projects: "CreationProjects", command: Command, *, session: str | None, source: str) -> CommandReceipt:
+def publish_segment_plan(projects, command: Command, *, session: str | None, source: str) -> CommandReceipt:
     replay = projects.replay(command)
     if replay is not None:
         return replay
