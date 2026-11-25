@@ -590,6 +590,15 @@ export function WorkspaceView({ rt, editingState, editSession }: {
     ? t("canvas.workspace.loading.switching")
     : "";
 
+  const canvasItems = creationClient(doc.id).snapshot?.canvasItems;
+  const selectedGroup = single?.type === "group" ? canvasItems?.find((item) => item.id === single.id) : undefined;
+  const planNode = selectedGroup?.kind === "group" && selectedGroup.runPlanItemId
+    ? doc.nodes.find((node) => node.type === "text" && node.id === selectedGroup.runPlanItemId)
+    : undefined;
+  const viewingPublishedPlan = Boolean(textWindowNode && canvasItems?.some(
+    (item) => item.kind === "group" && item.runPlanItemId === textWindowNode.id,
+  ));
+
   const workspace = (
     <div
       inert={!ready || switching || editHandoffPending}
@@ -1684,6 +1693,7 @@ export function WorkspaceView({ rt, editingState, editSession }: {
             }
             onRunWorkflow={single.type === "group" ? () => runWorkflow(single.id) : undefined}
             workflowRunning={workflowGroups.has(single.id)}
+            onViewGroupPlan={planNode ? () => setTextWindowId(planNode.id) : undefined}
             onUngroup={single.type === "group" ? ungroup : undefined}
             onLayout={
               single.type === "group" && !single.autoLayout
@@ -2705,6 +2715,7 @@ export function WorkspaceView({ rt, editingState, editSession }: {
           key={textWindowNode.id}
           node={textWindowNode}
           locked={lockedIds.has(textWindowNode.id)}
+          readOnly={viewingPublishedPlan}
           selections={actions.textSelections}
           onUpdate={(text) =>
             command({
@@ -2714,8 +2725,12 @@ export function WorkspaceView({ rt, editingState, editSession }: {
             })
           }
           onClose={() => {
-            void persist(historyRef.current.present);
             setTextWindowId(null);
+            if (viewingPublishedPlan) {
+              root.current?.focus({ preventScroll: true });
+              return;
+            }
+            void persist(historyRef.current.present);
             if (!lockedIds.has(textWindowNode.id)) setTextEditingId(textWindowNode.id);
             else root.current?.focus({ preventScroll: true });
           }}
