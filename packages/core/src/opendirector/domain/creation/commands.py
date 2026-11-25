@@ -6,7 +6,8 @@ from pydantic import ConfigDict, Field, TypeAdapter, create_model, model_validat
 
 from .assets import AssetRef, MediaMetadata
 from .base import CanvasColor, Contract, Digest, GenerationKind, MediaKind, ObjectVersion, Point, Positive, Revision, digest, unique
-from .canvas import CanvasItem
+from .segment_run import SegmentRunPlan
+from .canvas import GroupAssembly, CanvasItem
 from .editors import EditorDocument
 from opendirector.domain.rule_facts import PROMPT_MAX_LENGTH
 from .generation import GenerationSpec, Job, PromptPart, Reference
@@ -62,6 +63,14 @@ class AssetDelete(Contract):
     def assets(self):
         unique(self.assetIds, 'delete asset IDs')
         return self
+
+
+class GroupPlanDraft(Contract):
+    groupId: UUID = Field(description='Canvas group holding the draft.')
+    plan: SegmentRunPlan = Field(description='Segment intervals in source order.')
+    assembly: GroupAssembly = Field(description='Retained frames for the generated intervals.')
+    planLocale: Literal['zh-CN', 'en-US'] = Field(default='zh-CN', description='Language of the published plan.')
+    planNotes: str = Field(default='', max_length=16000, description='Notes accompanying the plan.')
 
 
 class CanvasShow(Contract):
@@ -338,6 +347,8 @@ _COMMANDS = (
     ('AssetMetadataCommand', 'asset.updateMetadata', AssetMetadataUpdate, 'Rename an asset.'),
     ('AssetDeleteCommand', 'asset.delete', AssetDelete, 'Delete assets after an impact preview.'),
     ('CanvasCreateGenerationCommand', 'canvas.createGeneration', CanvasCreateGeneration, 'Create a visible generation node and references atomically, preserving canvas source connections, including pinned ones.'),
+    ('GroupSavePlanCommand', 'group.saveRunPlan', GroupPlanDraft, 'Save a draft segment plan.'),
+    ('GroupPublishRunCommand', 'group.publishRun', GroupPlanDraft, 'Publish the segment plan as a Markdown canvas node.'),
     ('CanvasShowCommand', 'canvas.show', CanvasShow, 'Create or restore a canvas display item.'),
     ('CanvasMoveCommand', 'canvas.move', CanvasMove, 'Move one or more canvas items.'),
     ('CanvasUpdateCommand', 'canvas.update', CanvasPresentationUpdate, 'Update canvas presentation, grouping or lock state.'),

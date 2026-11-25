@@ -445,7 +445,7 @@ export interface CreationContractsInput extends ContractInput {
   readonly generationSpec: TextGenerationSpecInput | ImageGenerationSpecInput | VideoGenerationSpecInput | AudioGenerationSpecInput;
   readonly reference: PinnedReferenceInput | FollowingReferenceInput;
   readonly editorDocument: TimelineDocumentInput | SubjectDocumentInput | LayerDocumentInput | ImageCropDocumentInput | StackDocumentInput | ToolDocumentInput | DirectorDocumentInput | MediaEditDocumentInput;
-  readonly command: ProjectCreateCommandInput | ProjectRenameCommandInput | ProjectTrashCommandInput | ProjectRestoreCommandInput | AssetImportCommandInput | ArtifactPublishCommandInput | AssetWriteTextCommandInput | AssetMetadataCommandInput | AssetDeleteCommandInput | CanvasCreateGenerationCommandInput | CanvasShowCommandInput | CanvasMoveCommandInput | CanvasUpdateCommandInput | CanvasLayoutRunsCommandInput | CanvasHideCommandInput | CanvasMaterializeCommandInput | CanvasApplyEditCommandInput | CanvasPublishMediaCommandInput | TimelinePublishRenderCommandInput | NodeVersionApplyCommandInput | CanvasConfigureCommandInput | CanvasEditorAttachCommandInput | CanvasEditorDetachCommandInput | SpecCreateCommandInput | SpecUpdateCommandInput | SpecRestoreCommandInput | SpecPromptCommandInput | ReferenceAddCommandInput | ReferenceUpdateCommandInput | ReferenceRestoreCommandInput | ReferenceRemoveCommandInput | GenerationSubmitCommandInput | JobCancelCommandInput | JobRecoverCommandInput | JobCheckpointCommandInput | ResultSelectCommandInput | EditorCreateCommandInput | EditorSaveCommandInput | HistoryUndoCommandInput | HistoryRedoCommandInput | BatchCommandInput;
+  readonly command: ProjectCreateCommandInput | ProjectRenameCommandInput | ProjectTrashCommandInput | ProjectRestoreCommandInput | AssetImportCommandInput | ArtifactPublishCommandInput | AssetWriteTextCommandInput | AssetMetadataCommandInput | AssetDeleteCommandInput | CanvasCreateGenerationCommandInput | GroupSavePlanCommandInput | GroupPublishRunCommandInput | CanvasShowCommandInput | CanvasMoveCommandInput | CanvasUpdateCommandInput | CanvasLayoutRunsCommandInput | CanvasHideCommandInput | CanvasMaterializeCommandInput | CanvasApplyEditCommandInput | CanvasPublishMediaCommandInput | TimelinePublishRenderCommandInput | NodeVersionApplyCommandInput | CanvasConfigureCommandInput | CanvasEditorAttachCommandInput | CanvasEditorDetachCommandInput | SpecCreateCommandInput | SpecUpdateCommandInput | SpecRestoreCommandInput | SpecPromptCommandInput | ReferenceAddCommandInput | ReferenceUpdateCommandInput | ReferenceRestoreCommandInput | ReferenceRemoveCommandInput | GenerationSubmitCommandInput | JobCancelCommandInput | JobRecoverCommandInput | JobCheckpointCommandInput | ResultSelectCommandInput | EditorCreateCommandInput | EditorSaveCommandInput | HistoryUndoCommandInput | HistoryRedoCommandInput | BatchCommandInput;
   readonly receipt: CommandReceiptInput;
   readonly query: ProjectQueryInput | ObjectQueryInput | VersionsQueryInput | AssetSearchQueryInput | AssetUsageQueryInput | CanvasStatusQueryInput | JobStatusQueryInput | AssetPreviewQueryInput;
   readonly event: ProjectEventInput;
@@ -609,10 +609,43 @@ export interface GenerationSubmitCommandInput extends CommandBaseInput {
   readonly payload: GenerationSubmitInput;
 }
 
+export interface GroupAssemblyInput extends ContractInput {
+  readonly timelineItemId: string;
+  readonly outputItemId: string;
+  readonly clips: ReadonlyArray<WorkflowClipInput>;
+  readonly requireTimelineGuides?: boolean;
+  readonly guideExemptItemId?: string | null;
+}
+
 export interface GroupCanvasItemInput extends CanvasItemBaseInput {
   readonly kind: "group";
   readonly autoLayout?: "run" | null;
+  readonly runPlan?: SegmentRunPlanInput | null;
+  readonly draftRunPlan?: SegmentRunPlanInput | null;
+  readonly runPlanItemId?: string | null;
+  readonly runDefinitionId?: string | null;
+  readonly runPlanLocale?: "zh-CN" | "en-US" | null;
+  readonly runPlanNotes?: string | null;
+  readonly assembly?: GroupAssemblyInput | null;
   readonly binding?: ContainerBindingInput;
+}
+
+export interface GroupPlanDraftInput extends ContractInput {
+  readonly groupId: string;
+  readonly plan: SegmentRunPlanInput;
+  readonly assembly: GroupAssemblyInput;
+  readonly planLocale?: "zh-CN" | "en-US";
+  readonly planNotes?: string;
+}
+
+export interface GroupPublishRunCommandInput extends CommandBaseInput {
+  readonly type: "group.publishRun";
+  readonly payload: GroupPlanDraftInput;
+}
+
+export interface GroupSavePlanCommandInput extends CommandBaseInput {
+  readonly type: "group.saveRunPlan";
+  readonly payload: GroupPlanDraftInput;
 }
 
 export interface HistoryRedoCommandInput extends CommandBaseInput {
@@ -1200,6 +1233,38 @@ export interface ResultVersionInput extends ProjectEntityInput {
   readonly inputFingerprint: string;
 }
 
+export interface SegmentRunAnchorInput {
+  readonly kind: "anchor";
+}
+
+export interface SegmentRunContinuationInput {
+  readonly kind: "continuation";
+  readonly upstreamItemId: string;
+  readonly sourceFrames: readonly [number, number];
+}
+
+export interface SegmentRunGeneratedInput {
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly kind: "generated";
+  readonly itemId: string;
+  readonly shot: string;
+  readonly step: SegmentRunAnchorInput | SegmentRunContinuationInput;
+}
+
+export interface SegmentRunPlanInput extends ContractInput {
+  readonly source: AssetRefInput;
+  readonly fps: number;
+  readonly frameCount: number;
+  readonly entries: ReadonlyArray<SegmentRunSourceInput | SegmentRunGeneratedInput>;
+}
+
+export interface SegmentRunSourceInput {
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly kind: "source";
+}
+
 export interface SelectionBoxInput extends ContractInput {
   readonly x: number;
   readonly y: number;
@@ -1649,6 +1714,14 @@ export interface VoiceSelectionInput extends ContractInput {
   readonly refText?: string | null;
 }
 
+export interface WorkflowClipInput extends ContractInput {
+  readonly itemId: string;
+  readonly inFrame: number;
+  readonly outFrame: number;
+  readonly reverse?: boolean;
+  readonly frameLimit?: number | null;
+}
+
 export type CanvasItemInput = TextCanvasItemInput | ImageCanvasItemInput | VideoCanvasItemInput | AudioCanvasItemInput | FileCanvasItemInput | SubjectCanvasItemInput | TimelineCanvasItemInput | StackCanvasItemInput | ToolCanvasItemInput | DirectorCanvasItemInput | GroupCanvasItemInput;
 
 export type GenerationSpecInput = TextGenerationSpecInput | ImageGenerationSpecInput | VideoGenerationSpecInput | AudioGenerationSpecInput;
@@ -1657,7 +1730,7 @@ export type ReferenceInput = PinnedReferenceInput | FollowingReferenceInput;
 
 export type EditorDocumentInput = TimelineDocumentInput | SubjectDocumentInput | LayerDocumentInput | ImageCropDocumentInput | StackDocumentInput | ToolDocumentInput | DirectorDocumentInput | MediaEditDocumentInput;
 
-export type CommandInput = ProjectCreateCommandInput | ProjectRenameCommandInput | ProjectTrashCommandInput | ProjectRestoreCommandInput | AssetImportCommandInput | ArtifactPublishCommandInput | AssetWriteTextCommandInput | AssetMetadataCommandInput | AssetDeleteCommandInput | CanvasCreateGenerationCommandInput | CanvasShowCommandInput | CanvasMoveCommandInput | CanvasUpdateCommandInput | CanvasLayoutRunsCommandInput | CanvasHideCommandInput | CanvasMaterializeCommandInput | CanvasApplyEditCommandInput | CanvasPublishMediaCommandInput | TimelinePublishRenderCommandInput | NodeVersionApplyCommandInput | CanvasConfigureCommandInput | CanvasEditorAttachCommandInput | CanvasEditorDetachCommandInput | SpecCreateCommandInput | SpecUpdateCommandInput | SpecRestoreCommandInput | SpecPromptCommandInput | ReferenceAddCommandInput | ReferenceUpdateCommandInput | ReferenceRestoreCommandInput | ReferenceRemoveCommandInput | GenerationSubmitCommandInput | JobCancelCommandInput | JobRecoverCommandInput | JobCheckpointCommandInput | ResultSelectCommandInput | EditorCreateCommandInput | EditorSaveCommandInput | HistoryUndoCommandInput | HistoryRedoCommandInput | BatchCommandInput;
+export type CommandInput = ProjectCreateCommandInput | ProjectRenameCommandInput | ProjectTrashCommandInput | ProjectRestoreCommandInput | AssetImportCommandInput | ArtifactPublishCommandInput | AssetWriteTextCommandInput | AssetMetadataCommandInput | AssetDeleteCommandInput | CanvasCreateGenerationCommandInput | GroupSavePlanCommandInput | GroupPublishRunCommandInput | CanvasShowCommandInput | CanvasMoveCommandInput | CanvasUpdateCommandInput | CanvasLayoutRunsCommandInput | CanvasHideCommandInput | CanvasMaterializeCommandInput | CanvasApplyEditCommandInput | CanvasPublishMediaCommandInput | TimelinePublishRenderCommandInput | NodeVersionApplyCommandInput | CanvasConfigureCommandInput | CanvasEditorAttachCommandInput | CanvasEditorDetachCommandInput | SpecCreateCommandInput | SpecUpdateCommandInput | SpecRestoreCommandInput | SpecPromptCommandInput | ReferenceAddCommandInput | ReferenceUpdateCommandInput | ReferenceRestoreCommandInput | ReferenceRemoveCommandInput | GenerationSubmitCommandInput | JobCancelCommandInput | JobRecoverCommandInput | JobCheckpointCommandInput | ResultSelectCommandInput | EditorCreateCommandInput | EditorSaveCommandInput | HistoryUndoCommandInput | HistoryRedoCommandInput | BatchCommandInput;
 
 export type ExecutionParametersInput = TextExecutionInput | ImageExecutionInput | VideoExecutionInput | AudioExecutionInput;
 
@@ -2114,7 +2187,7 @@ export interface CreationContracts extends Contract {
   readonly generationSpec: TextGenerationSpec | ImageGenerationSpec | VideoGenerationSpec | AudioGenerationSpec;
   readonly reference: PinnedReference | FollowingReference;
   readonly editorDocument: TimelineDocument | SubjectDocument | LayerDocument | ImageCropDocument | StackDocument | ToolDocument | DirectorDocument | MediaEditDocument;
-  readonly command: ProjectCreateCommand | ProjectRenameCommand | ProjectTrashCommand | ProjectRestoreCommand | AssetImportCommand | ArtifactPublishCommand | AssetWriteTextCommand | AssetMetadataCommand | AssetDeleteCommand | CanvasCreateGenerationCommand | CanvasShowCommand | CanvasMoveCommand | CanvasUpdateCommand | CanvasLayoutRunsCommand | CanvasHideCommand | CanvasMaterializeCommand | CanvasApplyEditCommand | CanvasPublishMediaCommand | TimelinePublishRenderCommand | NodeVersionApplyCommand | CanvasConfigureCommand | CanvasEditorAttachCommand | CanvasEditorDetachCommand | SpecCreateCommand | SpecUpdateCommand | SpecRestoreCommand | SpecPromptCommand | ReferenceAddCommand | ReferenceUpdateCommand | ReferenceRestoreCommand | ReferenceRemoveCommand | GenerationSubmitCommand | JobCancelCommand | JobRecoverCommand | JobCheckpointCommand | ResultSelectCommand | EditorCreateCommand | EditorSaveCommand | HistoryUndoCommand | HistoryRedoCommand | BatchCommand;
+  readonly command: ProjectCreateCommand | ProjectRenameCommand | ProjectTrashCommand | ProjectRestoreCommand | AssetImportCommand | ArtifactPublishCommand | AssetWriteTextCommand | AssetMetadataCommand | AssetDeleteCommand | CanvasCreateGenerationCommand | GroupSavePlanCommand | GroupPublishRunCommand | CanvasShowCommand | CanvasMoveCommand | CanvasUpdateCommand | CanvasLayoutRunsCommand | CanvasHideCommand | CanvasMaterializeCommand | CanvasApplyEditCommand | CanvasPublishMediaCommand | TimelinePublishRenderCommand | NodeVersionApplyCommand | CanvasConfigureCommand | CanvasEditorAttachCommand | CanvasEditorDetachCommand | SpecCreateCommand | SpecUpdateCommand | SpecRestoreCommand | SpecPromptCommand | ReferenceAddCommand | ReferenceUpdateCommand | ReferenceRestoreCommand | ReferenceRemoveCommand | GenerationSubmitCommand | JobCancelCommand | JobRecoverCommand | JobCheckpointCommand | ResultSelectCommand | EditorCreateCommand | EditorSaveCommand | HistoryUndoCommand | HistoryRedoCommand | BatchCommand;
   readonly receipt: CommandReceipt;
   readonly query: ProjectQuery | ObjectQuery | VersionsQuery | AssetSearchQuery | AssetUsageQuery | CanvasStatusQuery | JobStatusQuery | AssetPreviewQuery;
   readonly event: ProjectEvent;
@@ -2278,10 +2351,43 @@ export interface GenerationSubmitCommand extends CommandBase {
   readonly payload: GenerationSubmit;
 }
 
+export interface GroupAssembly extends Contract {
+  readonly timelineItemId: string;
+  readonly outputItemId: string;
+  readonly clips: ReadonlyArray<WorkflowClip>;
+  readonly requireTimelineGuides?: boolean;
+  readonly guideExemptItemId?: string | null;
+}
+
 export interface GroupCanvasItem extends CanvasItemBase {
   readonly kind: "group";
   readonly autoLayout?: "run" | null;
+  readonly runPlan?: SegmentRunPlan | null;
+  readonly draftRunPlan?: SegmentRunPlan | null;
+  readonly runPlanItemId?: string | null;
+  readonly runDefinitionId?: string | null;
+  readonly runPlanLocale?: "zh-CN" | "en-US" | null;
+  readonly runPlanNotes?: string | null;
+  readonly assembly?: GroupAssembly | null;
   readonly binding: ContainerBinding;
+}
+
+export interface GroupPlanDraft extends Contract {
+  readonly groupId: string;
+  readonly plan: SegmentRunPlan;
+  readonly assembly: GroupAssembly;
+  readonly planLocale: "zh-CN" | "en-US";
+  readonly planNotes: string;
+}
+
+export interface GroupPublishRunCommand extends CommandBase {
+  readonly type: "group.publishRun";
+  readonly payload: GroupPlanDraft;
+}
+
+export interface GroupSavePlanCommand extends CommandBase {
+  readonly type: "group.saveRunPlan";
+  readonly payload: GroupPlanDraft;
 }
 
 export interface HistoryRedoCommand extends CommandBase {
@@ -2868,6 +2974,38 @@ export interface ResultVersion extends ProjectEntity {
   readonly inputFingerprint: string;
 }
 
+export interface SegmentRunAnchor {
+  readonly kind: "anchor";
+}
+
+export interface SegmentRunContinuation {
+  readonly kind: "continuation";
+  readonly upstreamItemId: string;
+  readonly sourceFrames: readonly [number, number];
+}
+
+export interface SegmentRunGenerated {
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly kind: "generated";
+  readonly itemId: string;
+  readonly shot: string;
+  readonly step: SegmentRunAnchor | SegmentRunContinuation;
+}
+
+export interface SegmentRunPlan extends Contract {
+  readonly source: AssetRef;
+  readonly fps: number;
+  readonly frameCount: number;
+  readonly entries: ReadonlyArray<SegmentRunSource | SegmentRunGenerated>;
+}
+
+export interface SegmentRunSource {
+  readonly sourceStart: number;
+  readonly sourceEnd: number;
+  readonly kind: "source";
+}
+
 export interface SelectionBox extends Contract {
   readonly x: number;
   readonly y: number;
@@ -3317,6 +3455,14 @@ export interface VoiceSelection extends Contract {
   readonly refText: string | null;
 }
 
+export interface WorkflowClip extends Contract {
+  readonly itemId: string;
+  readonly inFrame: number;
+  readonly outFrame: number;
+  readonly reverse: boolean;
+  readonly frameLimit: number | null;
+}
+
 export type CanvasItem = TextCanvasItem | ImageCanvasItem | VideoCanvasItem | AudioCanvasItem | FileCanvasItem | SubjectCanvasItem | TimelineCanvasItem | StackCanvasItem | ToolCanvasItem | DirectorCanvasItem | GroupCanvasItem;
 
 export type GenerationSpec = TextGenerationSpec | ImageGenerationSpec | VideoGenerationSpec | AudioGenerationSpec;
@@ -3325,7 +3471,7 @@ export type Reference = PinnedReference | FollowingReference;
 
 export type EditorDocument = TimelineDocument | SubjectDocument | LayerDocument | ImageCropDocument | StackDocument | ToolDocument | DirectorDocument | MediaEditDocument;
 
-export type Command = ProjectCreateCommand | ProjectRenameCommand | ProjectTrashCommand | ProjectRestoreCommand | AssetImportCommand | ArtifactPublishCommand | AssetWriteTextCommand | AssetMetadataCommand | AssetDeleteCommand | CanvasCreateGenerationCommand | CanvasShowCommand | CanvasMoveCommand | CanvasUpdateCommand | CanvasLayoutRunsCommand | CanvasHideCommand | CanvasMaterializeCommand | CanvasApplyEditCommand | CanvasPublishMediaCommand | TimelinePublishRenderCommand | NodeVersionApplyCommand | CanvasConfigureCommand | CanvasEditorAttachCommand | CanvasEditorDetachCommand | SpecCreateCommand | SpecUpdateCommand | SpecRestoreCommand | SpecPromptCommand | ReferenceAddCommand | ReferenceUpdateCommand | ReferenceRestoreCommand | ReferenceRemoveCommand | GenerationSubmitCommand | JobCancelCommand | JobRecoverCommand | JobCheckpointCommand | ResultSelectCommand | EditorCreateCommand | EditorSaveCommand | HistoryUndoCommand | HistoryRedoCommand | BatchCommand;
+export type Command = ProjectCreateCommand | ProjectRenameCommand | ProjectTrashCommand | ProjectRestoreCommand | AssetImportCommand | ArtifactPublishCommand | AssetWriteTextCommand | AssetMetadataCommand | AssetDeleteCommand | CanvasCreateGenerationCommand | GroupSavePlanCommand | GroupPublishRunCommand | CanvasShowCommand | CanvasMoveCommand | CanvasUpdateCommand | CanvasLayoutRunsCommand | CanvasHideCommand | CanvasMaterializeCommand | CanvasApplyEditCommand | CanvasPublishMediaCommand | TimelinePublishRenderCommand | NodeVersionApplyCommand | CanvasConfigureCommand | CanvasEditorAttachCommand | CanvasEditorDetachCommand | SpecCreateCommand | SpecUpdateCommand | SpecRestoreCommand | SpecPromptCommand | ReferenceAddCommand | ReferenceUpdateCommand | ReferenceRestoreCommand | ReferenceRemoveCommand | GenerationSubmitCommand | JobCancelCommand | JobRecoverCommand | JobCheckpointCommand | ResultSelectCommand | EditorCreateCommand | EditorSaveCommand | HistoryUndoCommand | HistoryRedoCommand | BatchCommand;
 
 export type ExecutionParameters = TextExecution | ImageExecution | VideoExecution | AudioExecution;
 
