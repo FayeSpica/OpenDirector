@@ -9,6 +9,9 @@ from .bigmodel_image import BIGMODEL_IMAGE_OUTPUTS
 
 
 def image_outputs(config, profile):
+    if profile == 'higgsfield-open':
+        from .higgsfield import IMAGE_RATIOS
+        return [dict(aspectRatio=ratio, size='2K') for ratio in IMAGE_RATIOS]
     if profile == 'bigmodel-glm-image':
         return [dict(aspectRatio=ratio, size=size) for ratio, size in BIGMODEL_IMAGE_OUTPUTS]
     if profile == 'minimax-h3-image':

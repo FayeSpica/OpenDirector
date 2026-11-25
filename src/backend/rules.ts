@@ -77,6 +77,7 @@ export interface ModelConfig {
     | "volcengine"
     | "minimax_video_v2"
     | "kling_video"
+    | "higgsfield_open"
     | "bigmodel_video"
     | "vllm_omni"
     | "vllm_omni_segmentation"

@@ -3895,6 +3895,10 @@
               "missing_object",
               "reference_invalid",
               "image_quality_unsupported",
+              "higgsfield_model",
+              "higgsfield_image",
+              "higgsfield_frames",
+              "higgsfield_prompt",
               "bigmodel_video_model",
               "bigmodel_video_output",
               "bigmodel_video_image",
@@ -8903,6 +8907,7 @@
             "enum": [
               "openai",
               "volcengine",
+              "higgsfield_open",
               "bigmodel_video",
               "kling_video",
               "minimax_video_v2",
@@ -9088,6 +9093,7 @@
             "enum": [
               "openai",
               "volcengine",
+              "higgsfield_open",
               "bigmodel_video",
               "kling_video",
               "minimax_video_v2",
@@ -9250,6 +9256,7 @@
             "enum": [
               "openai",
               "volcengine",
+              "higgsfield_open",
               "bigmodel_video",
               "kling_video",
               "minimax_video_v2",
@@ -9380,6 +9387,7 @@
             "enum": [
               "openai",
               "volcengine",
+              "higgsfield_open",
               "bigmodel_video",
               "kling_video",
               "minimax_video_v2",
@@ -20213,6 +20221,10 @@
               "missing_object",
               "reference_invalid",
               "image_quality_unsupported",
+              "higgsfield_model",
+              "higgsfield_image",
+              "higgsfield_frames",
+              "higgsfield_prompt",
               "bigmodel_video_model",
               "bigmodel_video_output",
               "bigmodel_video_image",
@@ -25431,6 +25443,7 @@
             "enum": [
               "openai",
               "volcengine",
+              "higgsfield_open",
               "bigmodel_video",
               "kling_video",
               "minimax_video_v2",
@@ -25606,6 +25619,7 @@
             "enum": [
               "openai",
               "volcengine",
+              "higgsfield_open",
               "bigmodel_video",
               "kling_video",
               "minimax_video_v2",
@@ -25773,6 +25787,7 @@
             "enum": [
               "openai",
               "volcengine",
+              "higgsfield_open",
               "bigmodel_video",
               "kling_video",
               "minimax_video_v2",
@@ -25907,6 +25922,7 @@
             "enum": [
               "openai",
               "volcengine",
+              "higgsfield_open",
               "bigmodel_video",
               "kling_video",
               "minimax_video_v2",

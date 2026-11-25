@@ -165,6 +165,18 @@ class CreationGeneration(GenerationRuntime):
         if spec.kind == 'video' and config['protocol'] == 'kling_video':
             from opendirector.domain.kling_models import kling_parameters
             return kling_parameters(config, intent, any(records[key]['kind'] == 'image' for key in node['referenceIds']))
+        if config['protocol'] == 'higgsfield_open':
+            if spec.kind == 'image':
+                from opendirector.domain.image_output import resolve_image_output
+                ratio = intent.get('aspectRatio') or 'auto'
+                return {'size': resolve_image_output(config, input_rules(config), {**intent, 'aspectRatio': ratio}),
+                        'aspect_ratio': ratio}
+            from opendirector.domain.kling_models import kling_parameters
+            has_frames = any(records[key]['kind'] == 'image' for key in node['referenceIds'])
+            rules = input_rules(config)
+            output = kling_parameters({**config, 'modelId': 'kling-4.0',
+                                       'videoCapabilities': rules['videoCapabilities']}, intent, has_frames)
+            return {key: output[key] for key in ('resolution', 'duration', 'ratio')}
         if spec.kind == 'text':
             params.update(thinking=intent['thinking'], max_tokens=intent['maxTokens'])
         if spec.kind == 'image':

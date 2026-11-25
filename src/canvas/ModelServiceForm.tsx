@@ -34,11 +34,13 @@ const PROTOCOLS: Record<
 > = {
   agent: [["openai", "models.protocolOption.openaiAgent"]],
   image: [
+    ["higgsfield_open", "models.protocolOption.higgsfieldOpen"],
     ["openai", "models.protocolOption.openaiImage"],
     ["volcengine", "models.protocolOption.volcengine"],
     ["vllm_omni_segmentation", "models.protocolOption.segmentation"],
   ],
   video: [
+    ["higgsfield_open", "models.protocolOption.higgsfieldOpen"],
     ["vllm_omni", "models.protocolOption.videos"],
     ["minimax_video_v2", "models.protocolOption.minimaxVideo"],
     ["kling_video", "models.protocolOption.klingVideo"],
@@ -164,7 +166,7 @@ export function ModelServiceForm({
     setValue((current) => ({
       ...current,
       ...patch,
-      ...(["minimax_video_v2", "kling_video", "bigmodel_video"].includes(patch.protocol ?? "")
+      ...(["higgsfield_open", "minimax_video_v2", "kling_video", "bigmodel_video"].includes(patch.protocol ?? "")
         ? ({
             connectionType: "api",
             authMode: "bearer",
@@ -484,6 +486,7 @@ export function ModelServiceForm({
               <input
                 type="checkbox"
                 checked={value.authMode === "none"}
+                disabled={value.protocol === "higgsfield_open"}
                 onChange={(event) =>
                   update({
                     authMode: event.target.checked ? "none" : "bearer",
@@ -508,7 +511,9 @@ export function ModelServiceForm({
                   ? t("models.service.noAuthPlaceholder")
                   : hasSavedKey
                     ? t("models.service.savedKeyPlaceholder")
-                    : t("models.service.apiKeyPlaceholder")
+                    : value.protocol === "higgsfield_open"
+                      ? t("models.service.higgsfieldKeyPlaceholder")
+                      : t("models.service.apiKeyPlaceholder")
               }
               onChange={(event) => update({ apiKey: event.target.value })}
             />

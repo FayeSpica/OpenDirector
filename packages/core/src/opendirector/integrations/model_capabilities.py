@@ -5,6 +5,8 @@ import logging
 import httpx
 
 from opendirector.domain.projects import ProjectError
+from opendirector.domain.higgsfield import IMAGE_MODEL, VIDEO_MODEL
+from opendirector.domain.video_capabilities import preset_capabilities
 from opendirector.domain.minimax_models import MINIMAX_MODELS
 from opendirector.domain.kling_models import KLING_MODELS, kling_capabilities
 from opendirector.domain.bigmodel_video import COGVIDEO_MODEL, cogvideo_capabilities
@@ -17,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 async def read_service_models(config, transport=None):
+    if config.get('protocol') == 'higgsfield_open':
+        if config['kind'] == 'image':
+            return [{'id': IMAGE_MODEL}]
+        return [{'id': VIDEO_MODEL, 'videoCapabilities': preset_capabilities('higgsfield-open', VIDEO_MODEL)}]
     if config.get('protocol') == 'bigmodel_video':
         return [{'id': COGVIDEO_MODEL, 'videoCapabilities': cogvideo_capabilities()}]
     if config.get('protocol') == 'kling_video':

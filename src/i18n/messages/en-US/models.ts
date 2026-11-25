@@ -2,6 +2,8 @@
 export const models = {
   "models.service.urlPlaceholder": "Enter your service's API base URL",
   "models.service.modelPlaceholder": "Enter the model ID from your service",
+  "models.service.higgsfieldKeyPlaceholder": "Paste the full key (KEY_ID:KEY_SECRET)",
+  "models.protocolOption.higgsfieldOpen": "Higgsfield Open API",
   "models.protocolOption.bigmodelVideo": "Zhipu BigModel video API (CogVideoX-3)",
   "models.service.bigmodelVideoSummary": "Text-to-video / single image / first-last frames",
   "models.service.bigmodelVideoReferences": "PNG or JPEG, up to 5 MB each. Prompts allow 512 characters. Choose a pixel size and a 5- or 10-second duration.",

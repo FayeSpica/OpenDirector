@@ -93,6 +93,16 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     authMode: "bearer",
   },
   {
+    id: "higgsfield-open",
+    name: "Higgsfield Open",
+    kinds: ["image", "video"],
+    url: "https://api.higgsfield.ai",
+    protocol: "higgsfield_open",
+    connectionType: "api",
+    authMode: "bearer",
+    modelsByKind: { image: ["kling-image/v4.0"], video: ["kling-video/v4.0"] },
+  },
+  {
     id: "bigmodel",
     name: "智谱 BigModel",
     logoOrganization: "zai-org",

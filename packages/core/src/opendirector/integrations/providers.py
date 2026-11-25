@@ -18,6 +18,7 @@ from opendirector.integrations.volcengine import VolcengineGeneration, bounded, 
 from opendirector.integrations.generation_errors import checked, protocol_failure, provider_failure, transport_failure
 from opendirector.integrations.minimax_video import MinimaxVideoGeneration
 from opendirector.integrations.kling_video import KlingVideoGeneration
+from opendirector.integrations.higgsfield import HiggsfieldGeneration
 from opendirector.integrations.bigmodel_video import BigModelVideoGeneration
 from opendirector.integrations.vllm_omni import VllmOmniGeneration, _upload
 from opendirector.integrations.fasth3 import generation_fields as fasth3_generation_fields
@@ -34,6 +35,7 @@ class GenerationProviders(VolcengineGeneration):
     def __init__(self, store, transport=None, poll_interval=3, retry_delays=(0.5, 1.0)):
         super().__init__(store, transport, poll_interval, retry_delays)
         self.minimax_video = MinimaxVideoGeneration(store, transport, poll_interval)
+        self.higgsfield = HiggsfieldGeneration(store, transport, poll_interval, retry_delays)
         self.bigmodel_video = BigModelVideoGeneration(store, transport, poll_interval, retry_delays)
         self.kling_video = KlingVideoGeneration(store, transport, poll_interval, retry_delays)
         self.vllm_omni = VllmOmniGeneration(store, transport, poll_interval)
@@ -46,6 +48,8 @@ class GenerationProviders(VolcengineGeneration):
         self.zhipu_speech = ZhipuSpeech(transport, poll_interval)
 
     def _profile_adapter(self, config):
+        if config and config.get('protocol') == 'higgsfield_open':
+            return self.higgsfield
         if config and config.get('protocol') == 'bigmodel_video':
             return self.bigmodel_video
         if config and config.get('protocol') == 'kling_video':

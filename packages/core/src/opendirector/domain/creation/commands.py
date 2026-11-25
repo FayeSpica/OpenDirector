@@ -411,6 +411,7 @@ def command_fingerprint(command: Command) -> str:
 from opendirector.domain.timeline_errors import TimelineIssueCode
 
 IssueCode = Literal[TimelineIssueCode, 'invalid_input', 'revision_conflict', 'role_restricted', 'canvas_run_layout_group', 'canvas_run_layout_conflict', 'canvas_run_layout_extent', 'canvas_run_layout_shared_object', 'missing_object', 'reference_invalid', 'image_quality_unsupported',
+                    'higgsfield_model', 'higgsfield_image', 'higgsfield_frames', 'higgsfield_prompt',
                     'bigmodel_video_model', 'bigmodel_video_output', 'bigmodel_video_image',
                     'bigmodel_video_frames', 'bigmodel_video_prompt', 'bigmodel_video_cancel',
                     'kling_model', 'kling_mode', 'kling_image', 'kling_frames', 'kling_prompt', 'kling_aspect', 'kling_output', 'kling_cancel',

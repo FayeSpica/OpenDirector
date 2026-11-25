@@ -7,6 +7,7 @@ from .moss_image import MOSS_IMAGE_PROMPT_CHARACTERS, is_moss_image
 from .moss_speech import is_moss_speech
 from .minimax_speech import MINIMAX_SPEECH_MODELS, MINIMAX_SPEECH_TEXT_CHARACTERS, is_minimax_speech
 from .projects import ProjectError
+from .higgsfield import IMAGE_BYTES, validate_model
 from .kling_models import KLING_MODELS, KLING_RATIOS, kling_capabilities
 from .bigmodel_image import is_bigmodel_image
 from .zhipu_speech import ZHIPU_DEFAULT_VOICE, ZHIPU_SPEECH_CHARACTERS, is_zhipu_speech
@@ -22,6 +23,13 @@ def _adapter_rules(config):
              'maxAudios': 0, 'imageBytes': 8 * 1024 * 1024, 'requestBytes': 48 * 1024 * 1024,
              'videoModes': ['first_frame'] if kind == 'video' else []}
     rules.update(maxVideos=0, videoBytes=DEFAULT_VIDEO_BYTES)
+    if config.get('protocol') == 'higgsfield_open':
+        validate_model(config)
+        rules.update(profile='higgsfield-open', maxImages=4 if kind == 'image' else 2, imageBytes=IMAGE_BYTES,
+                     maxPromptCharacters=50000)
+        if kind == 'video':
+            rules.update(frameRoles=['first_frame', 'last_frame'], aspectRatios=list(KLING_RATIOS))
+        return rules
     if is_bigmodel_image(config):
         rules.update(profile='bigmodel-glm-image', allowedKinds=['text'], maxImages=0)
         return rules

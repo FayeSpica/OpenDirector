@@ -66,6 +66,8 @@ def seedance_20_variant(model):
 def preset_capabilities(profile, model=''):
     if profile == 'bigmodel-cogvideox-3':
         return cogvideo_capabilities(model)
+    if profile == 'higgsfield-open':
+        return {**kling_capabilities('kling-4.0'), 'defaultDuration': 10}
     if profile == 'kling-official':
         return kling_capabilities(model)
     if profile in {'fasth3-omni', 'vllm-omni-h3'}:
@@ -132,7 +134,7 @@ def check_video_config(kind, protocol, adapter, capabilities):
         if protocol == 'bigmodel_video':
             validate_cogvideo_outputs(capabilities)
             return capabilities
-        if protocol == 'kling_video':
+        if protocol in {'kling_video', 'higgsfield_open'}:
             validate_kling_outputs(capabilities)
             return capabilities
         if protocol == 'minimax_video_v2':
