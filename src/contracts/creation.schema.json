@@ -6324,6 +6324,44 @@
       },
       "GroupPlanDraft": {
         "additionalProperties": false,
+        "examples": [
+          {
+            "assembly": {
+              "clips": [
+                {
+                  "inFrame": 0,
+                  "itemId": "00000000-0000-0000-0000-000000000003",
+                  "outFrame": 24
+                }
+              ],
+              "outputItemId": "00000000-0000-0000-0000-000000000005",
+              "timelineItemId": "00000000-0000-0000-0000-000000000004"
+            },
+            "groupId": "00000000-0000-0000-0000-000000000001",
+            "plan": {
+              "entries": [
+                {
+                  "itemId": "00000000-0000-0000-0000-000000000003",
+                  "kind": "generated",
+                  "shot": "opening",
+                  "sourceEnd": 24,
+                  "sourceStart": 0,
+                  "step": {
+                    "kind": "anchor"
+                  }
+                }
+              ],
+              "fps": 24,
+              "frameCount": 24,
+              "source": {
+                "assetId": "00000000-0000-0000-0000-000000000002",
+                "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "kind": "video",
+                "revision": 1
+              }
+            }
+          }
+        ],
         "properties": {
           "groupId": {
             "description": "Canvas group holding the draft.",
@@ -23312,6 +23350,44 @@
       },
       "GroupPlanDraft": {
         "additionalProperties": false,
+        "examples": [
+          {
+            "assembly": {
+              "clips": [
+                {
+                  "inFrame": 0,
+                  "itemId": "00000000-0000-0000-0000-000000000003",
+                  "outFrame": 24
+                }
+              ],
+              "outputItemId": "00000000-0000-0000-0000-000000000005",
+              "timelineItemId": "00000000-0000-0000-0000-000000000004"
+            },
+            "groupId": "00000000-0000-0000-0000-000000000001",
+            "plan": {
+              "entries": [
+                {
+                  "itemId": "00000000-0000-0000-0000-000000000003",
+                  "kind": "generated",
+                  "shot": "opening",
+                  "sourceEnd": 24,
+                  "sourceStart": 0,
+                  "step": {
+                    "kind": "anchor"
+                  }
+                }
+              ],
+              "fps": 24,
+              "frameCount": 24,
+              "source": {
+                "assetId": "00000000-0000-0000-0000-000000000002",
+                "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "kind": "video",
+                "revision": 1
+              }
+            }
+          }
+        ],
         "properties": {
           "groupId": {
             "description": "Canvas group holding the draft.",

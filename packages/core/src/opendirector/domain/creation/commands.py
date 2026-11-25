@@ -66,6 +66,30 @@ class AssetDelete(Contract):
 
 
 class GroupPlanDraft(Contract):
+    model_config = ConfigDict(json_schema_extra={'examples': [{
+        'groupId': '00000000-0000-0000-0000-000000000001',
+        'plan': {
+            'source': {
+                'assetId': '00000000-0000-0000-0000-000000000002',
+                'kind': 'video', 'revision': 1, 'fingerprint': 'sha256:' + '0' * 64,
+            },
+            'fps': 24, 'frameCount': 24,
+            'entries': [{
+                'kind': 'generated', 'sourceStart': 0, 'sourceEnd': 24,
+                'itemId': '00000000-0000-0000-0000-000000000003',
+                'shot': 'opening', 'step': {'kind': 'anchor'},
+            }],
+        },
+        'assembly': {
+            'timelineItemId': '00000000-0000-0000-0000-000000000004',
+            'outputItemId': '00000000-0000-0000-0000-000000000005',
+            'clips': [{
+                'itemId': '00000000-0000-0000-0000-000000000003',
+                'inFrame': 0, 'outFrame': 24,
+            }],
+        },
+    }]})
+
     groupId: UUID = Field(description='Canvas group holding the draft.')
     plan: SegmentRunPlan = Field(description='Segment intervals in source order.')
     assembly: GroupAssembly = Field(description='Retained frames for the generated intervals.')
@@ -302,6 +326,8 @@ class CommandBase(Contract):
         required = []
         if self.type in {'project.rename', 'project.trash', 'project.restore'}:
             required = [('project', self.projectId)]
+        elif self.type in {'group.saveRunPlan', 'group.publishRun'}:
+            required = [('canvas_item', payload.groupId)]
         elif self.type == 'canvas.publishMedia':
             required = [('canvas_item', payload.itemId), *[('asset', o.asset.assetId) for o in payload.outputs]]
             if payload.sourceEditorId:
