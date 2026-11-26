@@ -615,3 +615,30 @@ def test_publish_segment_plan_persists_a_read_only_card(api, tmp_path):
     _layout_command(client, path, project_id, 'canvas.update', dict(itemId=card['id'], locked=False),
                     expected_versions=[dict(objectType='canvas_item', id=card['id'], revision=card['revision'])],
                     status='rejected')
+
+
+def test_canvas_owner_survives_expiry_and_server_restart_until_takeover(api, monkeypatch):
+    from opendirector.infrastructure import local_projects
+
+    client, local = api
+    path, command, _ = create(client)
+    owner = client.headers['x-opendirector-session']
+    preview = str(uuid4())
+    allow_preview = {'X-OpenDirector-Allow-Preview': 'true'}
+    opened = client.post(path + '/open-canvas', headers=allow_preview)
+    assert opened.json()['editing'] == {'mode': 'edit'}
+
+    clock = local_projects.time.time
+    future = clock() + LocalProjects.LEASE_SECONDS + 1
+    monkeypatch.setattr(local_projects.time, 'time', lambda: future)
+    restarted = LocalProjects(local.repository)
+    with TestClient(create_app(restarted), headers={'X-OpenDirector-Request': '1'}) as other:
+        viewer = {'X-OpenDirector-Session': preview}
+        editor = {'X-OpenDirector-Session': owner}
+        assert other.post(path + '/open-canvas', headers={**allow_preview, **viewer}).json()['editing'] == {'mode': 'preview'}
+        assert other.get(path + '/edit-session', headers=editor).json() == {'mode': 'edit'}
+        assert other.post(path + '/edit-session', headers=viewer).json() == {'mode': 'edit'}
+        assert other.get(path + '/edit-session', headers=editor).json() == {'mode': 'preview'}
+        assert other.post(path + '/commands', json=rename(command), headers=editor).status_code == 409
+        assert other.delete('/api/creation/sessions/' + preview).is_success
+        assert other.post(path + '/open-canvas', headers={**allow_preview, **editor}).json()['editing'] == {'mode': 'edit'}

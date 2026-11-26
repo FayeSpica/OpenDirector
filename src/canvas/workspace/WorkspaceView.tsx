@@ -1147,11 +1147,10 @@ export function WorkspaceView({ rt, editingState, editSession }: {
             <button
               type="button"
               className="cw-edit-request"
-              disabled={editSession.working || editingState.handoff === "requested" || editingState.handoff === "busy"}
+              disabled={editSession.working}
               onClick={() => void editSession.request()}
             >
-              {t(editingState.handoff === "requested" ? "canvas.workspace.preview.requested" :
-                editingState.handoff === "busy" ? "canvas.workspace.preview.busy" : "canvas.workspace.preview.request")}
+              {t("canvas.workspace.preview.request")}
             </button>
             {editSession.error && <span role="alert">{editSession.error}</span>}
           </> : <span className="cw-save-status" title={saveStatusText}>
