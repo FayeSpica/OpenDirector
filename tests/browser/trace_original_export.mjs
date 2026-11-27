@@ -8,7 +8,7 @@
  * itself is covered by tests/test_agent_job_lineage.py.
  */
 import assert from "node:assert/strict";
-import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, open, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -451,6 +451,8 @@ try {
     const activeTurn = crypto.randomUUID();
     const log = join(directory, "agent-runs", `${activeTurn}.codex.jsonl`);
     const cursorPath = `/traces/${activeTurn}/codex`;
+    const chunkBytes = 512 * 1024;
+    const logBytes = 64 * 1024 * 1024;
     const { context, page, seen } = await openContext("en-US");
     await api("/creation-test-assistant-gate", { open: false });
     let turnResponse;
@@ -479,12 +481,32 @@ try {
       await page.goto(tracePage(`conversation=${emptyId}&turn=${activeTurn}&runtime=codex&live=1`));
       await missing;
 
-      // Put the first byte of 场 at the end of the first HTTP chunk.
+      // Split this record across responses. The live append below also splits a UTF-8 character.
       const prefix = '{"padding":"';
-      const padding = "x".repeat(512 * 1024 - 1 - prefix.length);
+      const padding = "x".repeat(chunkBytes - 1 - prefix.length);
       const initial = prefix + padding + '场","native":{"type":"item.started","item":'
         + '{"id":"cmd","type":"command_execution","command":"inspect 场景","status":"in_progress"}}}\n';
-      await writeFile(log, initial);
+      // Use complete, hidden lifecycle records to model a large log with large
+      // individual records. Publish the fixture only after all 64 MiB are on disk.
+      const lifecycle = (bytes) => {
+        const prefix = '{"native":{"type":"thread.started"},"padding":"';
+        const suffix = '"}\n';
+        return prefix + "x".repeat(bytes - prefix.length - suffix.length) + suffix;
+      };
+      const block = lifecycle(2 * chunkBytes);
+      const file = await open(log + ".fixture", "w");
+      try {
+        let remaining = logBytes - Buffer.byteLength(initial);
+        while (remaining >= block.length) {
+          await file.writeFile(block);
+          remaining -= block.length;
+        }
+        await file.writeFile(lifecycle(remaining));
+        await file.writeFile(initial);
+      } finally {
+        await file.close();
+      }
+      await rename(log + ".fixture", log);
       const row = page.locator(".cw-trace-row").filter({ has: page.getByText("inspect 场景", { exact: true }) });
       await row.getByText("Running", { exact: true }).waitFor();
       await row.locator("summary").click();
@@ -502,6 +524,8 @@ try {
         return url.pathname.endsWith(cursorPath) && url.searchParams.has("cursor")
           && Number(headers["content-length"]) === bytes && headers["x-trace-running"] === running;
       });
+
+      await observed(0, "1");
 
       const firstDelta = observed(split, "1");
       await appendFile(log, partial.subarray(0, split));
@@ -531,8 +555,8 @@ try {
       await sleep(2200);
       assert.equal(reads.length, terminalReads, "terminal turn must stop reading its log");
       assert.equal(reads.filter((read) => read.status === 200 && read.cursor === "").length, 1);
-      assert.ok(reads.every((read) => read.cursor !== null && read.bytes <= 512 * 1024));
-      assert.equal(reads.reduce((sum, read) => sum + read.bytes, 0), Buffer.byteLength(initial + delta));
+      assert.ok(reads.every((read) => read.cursor !== null && read.bytes <= chunkBytes));
+      assert.equal(reads.reduce((sum, read) => sum + read.bytes, 0), logBytes + Buffer.byteLength(delta));
       assertReadOnly(seen);
     } finally {
       await api("/creation-test-assistant-gate", { open: true });
