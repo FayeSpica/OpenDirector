@@ -107,3 +107,33 @@ def test_turn_resolves_to_its_own_conversation_including_archived(assistant):
     assert client.get(f'{path}/traces/{new_turn}/conversation').json() == {'conversationId': second}
     assert client.get(f'{path}/traces/{uuid4()}/conversation').status_code == 404
     assert client.get(path + '/conversations').json()['activeId'] == second
+
+
+def test_trace_cursor_reads_appended_bytes_and_preserves_original_export(assistant, tmp_path):
+    client, path, _ = assistant
+    conversation = client.get(path).json()['conversationId']
+    send(client, path, conversation, '轨迹')
+    turn = client.get(f'{path}/conversations/{conversation}/trace').json()['turns'][0]['id']
+    url = f'{path}/traces/{turn}/deepseek'
+    file = conversation_file(tmp_path).parent / f'{turn}.deepseek.jsonl'
+    first = '{"text":"第一条"}\n'.encode()
+    second = '{"text":"第二条"}\n'.encode()
+    file.write_bytes(first)
+
+    initial = client.get(url, params={'cursor': ''})
+    assert initial.content == first
+    assert initial.headers['X-Trace-Running'] == '0'
+    cursor = initial.headers['X-Trace-Cursor']
+    assert client.get(url, params={'cursor': cursor}).content == b''
+
+    with file.open('ab') as stream:
+        stream.write(second)
+    assert client.get(url, params={'cursor': cursor}).content == second
+    assert client.get(url).content == first + second
+
+    replacement = file.with_suffix('.new')
+    replacement.write_bytes(second + first)
+    replacement.replace(file)
+    reset = client.get(url, params={'cursor': cursor})
+    assert reset.headers['X-Trace-Reset'] == '1'
+    assert reset.content == second + first
