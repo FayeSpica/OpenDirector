@@ -145,6 +145,25 @@ def test_trace_cursor_reads_appended_bytes_and_preserves_original_export(assista
     assert reset.content == second + first
 
 
+@pytest.mark.parametrize('params', [{}, {'cursor': ''}], ids=['export', 'cursor'])
+def test_trace_rejects_symlink(assistant, tmp_path, params):
+    client, path, _ = assistant
+    conversation = client.get(path).json()['conversationId']
+    send(client, path, conversation, '轨迹')
+    target = tmp_path / 'outside.jsonl'
+    target.write_text('{"text":"outside"}\n')
+    turn = uuid4()
+    folder = conversation_file(tmp_path).parent
+    try:
+        (folder / f'{turn}.deepseek.jsonl').symlink_to(target)
+    except OSError:
+        pytest.skip('Cannot create symbolic links on this host')
+
+    response = client.get(f'{path}/traces/{turn}/deepseek', params=params)
+    assert response.status_code == 409
+    assert target.read_text() == '{"text":"outside"}\n'
+
+
 class Clock:
     """Deterministic stand-in for the agent module's time source."""
     def __init__(self):

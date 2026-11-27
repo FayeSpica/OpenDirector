@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 import json
 import logging
 from os import fstat
+from os.path import join, normpath
 from pathlib import Path
 import threading
 import time
@@ -516,7 +517,12 @@ def agent_routes(projects, generation, configs, provider=None, *, active=None) -
               source: Literal['opencode', 'codex', 'claude', 'jiuwenswarm', 'deepseek', 'model'],
               cursor: Annotated[str | None, Query(pattern=r'^(?:[0-9]+:[0-9]+:[0-9]+)?$', max_length=64)] = None):
         folder = child(conversations.path(project_id), 'agent-runs')
-        file = child(folder, f'{turn_id}.{source}.jsonl')
+        filename = normpath(join(folder, f'{turn_id}.{source}.jsonl'))
+        if not filename.startswith(join(folder, '')):
+            raise ProjectError('轨迹文件不存在。', 404)
+        file = Path(filename)
+        if file.is_symlink():
+            raise ProjectError('项目内部文件不能是符号链接。', 409)
         headers = {'Cache-Control': 'no-store'}
         if cursor is None:
             if not file.is_file():
