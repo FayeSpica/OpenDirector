@@ -6,7 +6,9 @@ import json
 import logging
 from os import fstat
 from pathlib import Path
+import threading
 import time
+from datetime import datetime, timezone
 from typing import Annotated, Literal
 from uuid import UUID, uuid4, uuid5
 
@@ -116,9 +118,37 @@ def reused_ids(value):
     return [str(item) for item in (value.get('reusedCreateIds') or [])]
 
 
+def _monotonic() -> float:
+    # Own indirection so turn timing never shares a patch point with other users of `time` in this module.
+    return time.monotonic()
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+
+
+def _duration_ms(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _timestamp(value):
+    return value if isinstance(value, str) and value else None
+
+
+TIMED_STATUSES = {'complete', 'stopped', 'interrupted'}
+
+
 class Conversations:
     def __init__(self, projects):
         self.projects = projects
+        # Turn timing is recorded here, not in produce(). The window starts right after the begin write
+        # succeeded, inside the begin transaction (the begin write is excluded, so persistence latency
+        # never counts; `startedAt` is stamped earlier, when the placeholder is built) and ends at entry of the finish
+        # update (the finish write is excluded). Job completion never extends it and browser time is
+        # never used. The monotonic start lives in this process only: after a restart the duration is
+        # unknown and stays absent rather than invented.
+        self._started: dict[str, float] = {}
+        self._started_lock = threading.Lock()
 
     def path(self, project_id: UUID, session: str | None = None) -> Path:
         with self.projects.local.transaction() as db:
@@ -131,6 +161,7 @@ class Conversations:
     def update(self, project_id: UUID, session: str | None = None, *, draft: Draft | None = None,
                begin: dict | None = None, finish: dict | None = None, conversation_id: UUID | None = None,
                before_begin=None, agent_session: str | None = None) -> dict:
+        finish_mono, finish_at = (_monotonic(), _utc_now()) if finish is not None else (None, None)
         with self.projects.local.transaction() as db:
             self.projects._recover()
             directory, _, _ = self.projects._load(db, project_id)
@@ -145,6 +176,7 @@ class Conversations:
             if (draft is not None or begin is not None or finish is not None) and str(supplied) != value['conversationId'] and (supplied is not None or value.get('archivedConversations')):
                 raise ProjectError('当前对话已切换，请重新加载后重试；原对话未覆盖。', 409)
             changed = False
+            started = None
             if draft is not None:
                 value.update(draft.model_dump(mode="json", exclude={"conversationId"}))
                 changed = True
@@ -156,16 +188,40 @@ class Conversations:
                 if agent_session is not None:
                     self.projects.local.start_agent_session(db, project_id, directory, agent_session)
                 value['messages'].append(begin)
-                value['messages'].append({'id': str(uuid5(UUID(begin['id']), 'assistant')),
-                    'role': 'assistant', 'text': '', 'status': 'streaming',
+                reply_id = str(uuid5(UUID(begin['id']), 'assistant'))
+                value['messages'].append({'id': reply_id,
+                    'role': 'assistant', 'text': '', 'status': 'streaming', 'startedAt': _utc_now(),
                     **{key: begin[key] for key in ('model', 'modelIsCliDefault', 'runtime') if key in begin}})
                 value.update(draft='', draftContent=None, assets=[], skills=[])
                 changed = True
             if finish is not None:
-                value['messages'] = [finish if message['id'] == finish['id'] else message for message in value['messages']]
+                with self._started_lock:
+                    started = self._started.pop(finish['id'], None)
+                def stamped(message):
+                    result = dict(finish)
+                    if message.get('startedAt'):
+                        result['startedAt'] = message['startedAt']
+                    if finish.get('status') in TIMED_STATUSES and started is not None:
+                        result.setdefault('finishedAt', finish_at)
+                        result.setdefault('durationMs', max(0, round((finish_mono - started) * 1000)))
+                    return result
+                value['messages'] = [stamped(message) if message['id'] == finish['id'] else message
+                                     for message in value['messages']]
                 changed = True
             if changed:
-                durable_json(file, value)
+                try:
+                    durable_json(file, value)
+                except BaseException:
+                    if started is not None:
+                        # The finish write failed: the message is still streaming on disk, so keep its start.
+                        with self._started_lock:
+                            self._started.setdefault(finish['id'], started)
+                    raise
+                if begin is not None:
+                    # The turn counts as accepted only now. The clock starts after the begin write succeeded,
+                    # still inside the transaction, so no finish for this reply can run before it is set.
+                    with self._started_lock:
+                        self._started[reply_id] = _monotonic()
             result = public_conversation(value)
         return with_trace_sources(result, directory)
 
@@ -222,12 +278,16 @@ class Conversations:
                 return None
             index = value['messages'].index(pending)
             pending['status'] = 'complete'
+            reply_id = str(uuid5(UUID(pending['id']), 'assistant'))
             value['messages'].insert(index + 1, {
-                'id': str(uuid5(UUID(pending['id']), 'assistant')),
-                'role': 'assistant', 'text': '', 'status': 'streaming',
+                'id': reply_id,
+                'role': 'assistant', 'text': '', 'status': 'streaming', 'startedAt': _utc_now(),
                 **{key: pending[key] for key in ('model', 'runtime') if key in pending}})
             value.update(draft='', draftContent=None, assets=[], skills=[])
             durable_json(file, value)
+            # Same boundary as update(begin): the clock starts once the write succeeded, inside the transaction.
+            with self._started_lock:
+                self._started[reply_id] = _monotonic()
             result = public_conversation(value)
         return {'message': pending, 'conversation': with_trace_sources(result, directory)}
 
@@ -301,7 +361,10 @@ class Conversations:
                           'text': (message.get('text') or '')[:200],
                           'runtime': reply.get('runtime') or message.get('runtime') or 'default',
                           'model': reply.get('model') or message.get('model'),
-                          'status': status})
+                          'status': status,
+                          'startedAt': _timestamp(reply.get('startedAt')),
+                          'finishedAt': _timestamp(reply.get('finishedAt')),
+                          'durationMs': _duration_ms(reply.get('durationMs'))})
         return {'conversationId': found['conversationId'], 'active': found is current, 'turns': turns}
 
     def conversation_of(self, project_id: UUID, turn_id: UUID) -> str:

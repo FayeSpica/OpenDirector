@@ -4,6 +4,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import { traceCategory, isThinkingTokenEstimate, readableTraceValue } from "./traceCategory.ts";
 
+import { turnTiming, TURN_STATUS_KEYS } from "./turnTiming.ts";
 import { initialTurn, runtimeName, traceRuntime, traceSources, type ConversationTurn } from "./traceTurns.ts";
 
 import { createTraceCursor, type TraceSnapshot } from "./traceCursor.ts";
@@ -306,11 +307,6 @@ function TurnTrace({ project, turn, runtime, live }: {
   );
 }
 
-const STATUS_KEYS: Record<ConversationTurn["status"], MessageKey> = {
-  streaming: "trace.turn.status.streaming", complete: "trace.turn.status.complete",
-  stopped: "trace.turn.status.stopped", interrupted: "trace.turn.status.interrupted",
-};
-
 function ConversationTrace({ project, conversationId, target, turns }: {
   project: string; conversationId: string; target: string; turns: ConversationTurn[];
 }) {
@@ -401,7 +397,10 @@ function ConversationTrace({ project, conversationId, target, turns }: {
             <span className="cw-trace-preview">{item.text}</span>
             <span className="cw-trace-turn-meta">
               <span>{runtimeName(item.runtime)}</span>
-              <span className={`cw-trace-badge is-turn-${item.status}`}>{t(STATUS_KEYS[item.status])}</span>
+              <span className={`cw-trace-badge is-turn-${item.status}`}>{t(TURN_STATUS_KEYS[item.status])}</span>
+              {item.status !== "streaming" && (
+                <span className="cw-trace-turn-duration">{turnTiming(item, t).duration ?? t("trace.turn.duration.unavailable")}</span>
+              )}
             </span>
           </summary>
           {loaded.has(item.id) && (
