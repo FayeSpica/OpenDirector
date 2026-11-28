@@ -276,6 +276,37 @@ test("paste remaps nested identity and references, offsets roots once, and suppo
   assert.equal(source.nodes.length, 3);
 });
 
+test("duplicate retains incoming, internal and outgoing connections with fresh identities", () => {
+  const image = (x: number) => createNode("image", { x, y: 0 }, {
+    src: "data:image/png;base64,AA==",
+  });
+  const [upstream, first, second] = [image(0), image(300), image(600)];
+  const downstream = createNode("video", { x: 900, y: 0 }, {
+    settings: { videoMode: "reference" },
+  });
+  const edges = [
+    { id: "in", source: upstream.id, target: second.id, targetHandle: "in" },
+    { id: "internal", source: first.id, target: second.id },
+    { id: "out", source: second.id, target: downstream.id },
+  ];
+  const document = { ...createDocument(), nodes: [upstream, first, second, downstream], edges };
+  const fragment = copySelection(document, [first.id, second.id]);
+  const pasted = pasteFragment(document, fragment);
+  assert.equal(pasted.document.edges.length, 4);
+
+  const duplicate = pasteFragment(document, fragment, undefined, "duplicate");
+  const [firstCopy, secondCopy] = duplicate.ids;
+  assert.deepEqual(duplicate.document.edges.slice(0, 3), edges);
+  const added = duplicate.document.edges.slice(3);
+  assert.deepEqual(added.map(({ source, target }) => [source, target]), [
+    [upstream.id, secondCopy],
+    [firstCopy, secondCopy],
+    [secondCopy, downstream.id],
+  ]);
+  assert.equal(added[0]?.targetHandle, "in");
+  assert.equal(new Set(duplicate.document.edges.map(({ id }) => id)).size, 6);
+});
+
 test("paste orders parents first and rejects incomplete or cyclic fragments without mutating the destination", () => {
   const document = createDocument();
   const parent = createNode("group");

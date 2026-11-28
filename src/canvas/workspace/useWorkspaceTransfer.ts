@@ -498,7 +498,11 @@ export function useWorkspaceTransfer(rt: WorkspaceRuntime, readOnly: boolean) {
       void pasteFromProject(fragment, media);
       return;
     }
-    insertFragment(fragment, 40 * (duplicate ? 1 : ++pasteCount.current));
+    insertFragment(
+      fragment,
+      40 * (duplicate ? 1 : ++pasteCount.current),
+      duplicate ? "duplicate" : "paste",
+    );
   };
   const pasteFromProject = async (
     fragment: CanvasFragment,
@@ -540,12 +544,13 @@ export function useWorkspaceTransfer(rt: WorkspaceRuntime, readOnly: boolean) {
       pasting.current = false;
     }
   };
-  const insertFragment = (fragment: CanvasFragment, distance: number) => {
+  const insertFragment = (
+    fragment: CanvasFragment,
+    distance: number,
+    mode: "paste" | "duplicate" = "paste",
+  ) => {
     const before = historyRef.current.present;
-    const result = pasteFragment(before, fragment, {
-      x: distance,
-      y: distance,
-    });
+    const result = pasteFragment(before, fragment, { x: distance, y: distance }, mode);
     change(() => result.document);
     // Keep each paste in its own durable undo step, even inside the autosave debounce.
     void persist(before, false);
