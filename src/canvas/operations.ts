@@ -354,10 +354,25 @@ export function pasteFragment(
   document: CanvasDocument,
   fragment: CanvasFragment,
   offset: Point = { x: 40, y: 40 },
+  mode: "paste" | "duplicate" = "paste",
 ): { document: CanvasDocument; ids: string[] } {
   if (!Number.isFinite(offset.x) || !Number.isFinite(offset.y))
     throw new Error(tNow("errors.operations.pasteOffset"));
   const byId = indexNodes(fragment.nodes);
+  const boundaryEdges = mode === "duplicate"
+    ? document.edges.filter((edge) =>
+        edge.intent !== "post_edit_result" &&
+        edge.referenceBinding !== "pinned" &&
+        byId.has(edge.source) !== byId.has(edge.target))
+    : [];
+  const incomingBoundaryIds = new Set(boundaryEdges.map((edge) => edge.id));
+  const incomingSourceIds = new Map<string, Set<string>>();
+  for (const edge of boundaryEdges) {
+    if (!byId.has(edge.target) || edge.intent === "assembly_input") continue;
+    const sources = incomingSourceIds.get(edge.target) ?? new Set<string>();
+    sources.add(edge.source);
+    incomingSourceIds.set(edge.target, sources);
+  }
   for (const node of fragment.nodes) ancestors(node, byId);
   for (const node of fragment.nodes)
     if (node.data.stack?.nodeIds.some((id) => !byId.has(id)))
@@ -391,7 +406,7 @@ export function pasteFragment(
     copy.data.title = derivedNodeTitle(node.data.title, titles);
     if (copy.type === "image") copy.data.copiedSourceId = node.id;
     copy.data = remapDataReferences(copy.data, remapped);
-    if (copy.data.promptContent && copy.data.settings && node.data.settings) {
+    if (copy.data.settings && node.data.settings) {
       for (const field of ["firstFrameNodeId", "lastFrameNodeId"] as const) {
         const original = node.data.settings[field];
         if (
@@ -400,9 +415,10 @@ export function pasteFragment(
           [...document.nodes, ...(document.hiddenNodes ?? [])].some(
             (source) => source.id === original,
           ) &&
-          copy.data.promptContent.some(
-            (part) => part.type === "reference" && part.nodeId === original,
-          )
+          (incomingSourceIds.get(node.id)?.has(original) ||
+            copy.data.promptContent?.some(
+              (part) => part.type === "reference" && part.nodeId === original,
+            ))
         )
           copy.data.settings = { ...copy.data.settings, [field]: original };
       }
@@ -430,10 +446,15 @@ export function pasteFragment(
     return copy;
   });
   let ordered = orderNodesForCanvas(nodes);
-  const edges = fragment.edges.map((edge) => ({
+  const incomingEdges = mode === "duplicate"
+    ? document.edges.filter((edge) =>
+        edgeIds.has(edge.id) ||
+        (byId.has(edge.target) && incomingBoundaryIds.has(edge.id)))
+    : fragment.edges;
+  const edges = incomingEdges.map((edge) => ({
     ...structuredClone(edge),
     id: newId(),
-    source: remapped.get(edge.source)!,
+    source: remapped.get(edge.source) ?? edge.source,
     target: remapped.get(edge.target)!,
   }));
   const knownSources = new Set(
@@ -481,14 +502,20 @@ export function pasteFragment(
       data: { ...node.data, ...generationContentPatch(content) },
     };
   });
-  return {
-    document: {
-      ...document,
-      nodes: [...document.nodes, ...ordered],
-      edges: [...document.edges, ...edges],
-    },
-    ids: ordered.map((node) => node.id),
+  let next = {
+    ...document,
+    nodes: [...document.nodes, ...ordered],
+    edges: [...document.edges, ...edges],
   };
+  for (const edge of boundaryEdges) {
+    const source = remapped.get(edge.source);
+    if (source)
+      next = applyCommand(next, {
+        type: "add-edge",
+        edge: { ...edge, id: newId(), source },
+      });
+  }
+  return { document: next, ids: ordered.map((node) => node.id) };
 }
 
 /** Rewrites node identities only; retained media resource IDs and sources are not node identities. */
